@@ -649,9 +649,22 @@
     if (drawerOpen) {
       box.scrollTop = box.scrollHeight;
     } else if (freshAgent) {
-      // Fresh agent activity while the thread is closed: nudge, don't yank.
+      // Fresh agent activity while the thread is closed: if the human is
+      // mid-conversation (their latest message came after the drawer was
+      // last closed), they're waiting on this reply — open the thread so
+      // the answer is where they're looking. Otherwise nudge, don't yank.
       var agent = newestAgentMessage(messages);
-      if (agent) {
+      var humanTs = 0;
+      for (var i = messages.length - 1; i >= 0; i--) {
+        var hm = messages[i];
+        if (hm.name !== "Brodie" && hm.name !== "room" && hm.kind !== "command" && hm.kind !== "system") {
+          humanTs = hm.ts || 0;
+          break;
+        }
+      }
+      if (agent && humanTs > 0 && humanTs + 15000 >= lastDrawerCloseTs) {
+        openDrawer();
+      } else if (agent) {
         unread++;
         updateUnread();
         showToast("<b>" + esc(agent.name || "Brodie") + "</b> · " + esc(trunc(agent.text, 90)));
@@ -692,6 +705,7 @@
   /* ---------------- agent drawer + toast ---------------- */
 
   var unread = 0;
+  var lastDrawerCloseTs = 0;
   function updateUnread() {
     var b = $("#unread-badge");
     b.hidden = unread <= 0;
@@ -710,6 +724,7 @@
   function closeDrawer() {
     $("#agent-drawer").hidden = true;
     $("#agent-scrim").hidden = true;
+    lastDrawerCloseTs = Date.now();
   }
 
   $("#agent-presence").addEventListener("click", function () {
