@@ -9,6 +9,18 @@
 </head>
 <body>
 
+<!-- Name picker, first visit only (in normal flow so iPhone taps always land) -->
+<div id="name-overlay" class="overlay" hidden>
+  <div class="overlay-card">
+    <h2>Who's here?</h2>
+    <p>Pick a display name so the room knows who's talking.</p>
+    <form id="name-form" autocomplete="off">
+      <input id="name-input" type="text" placeholder="e.g. Bakari, or Agent" maxlength="40" aria-label="Display name">
+      <button type="submit">Join room</button>
+    </form>
+  </div>
+</div>
+
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark">▶</span>
@@ -77,18 +89,6 @@
     </form>
   </section>
 </main>
-
-<!-- Name picker, first visit only -->
-<div id="name-overlay" class="overlay" hidden>
-  <div class="overlay-card">
-    <h2>Who's here?</h2>
-    <p>Pick a display name so the room knows who's talking.</p>
-    <form id="name-form" autocomplete="off">
-      <input id="name-input" type="text" placeholder="e.g. Bakari, or Agent" maxlength="40" aria-label="Display name">
-      <button type="submit">Join room</button>
-    </form>
-  </div>
-</div>
 
 <footer class="footer">
   <span>Tools on this page: <code>search_videos</code> · <code>list_trending_videos</code> · <code>get_video_details</code> · <code>display_videos</code> · <code>play_video</code> · <code>read_messages</code> · <code>send_message</code></span>
