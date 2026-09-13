@@ -20,7 +20,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const text = typeof body.text === "string" ? body.text.trim() : "";
-    const kind: ChatKind = body.kind === "result" ? "result" : "chat";
+    const kind: ChatKind =
+      body.kind === "result" ? "result" : body.kind === "system" ? "system" : "chat";
     const video_ids = Array.isArray(body.video_ids) ? body.video_ids : undefined;
     if (!name || !text) return res.status(400).json({ error: "Both name and text are required." });
     try {

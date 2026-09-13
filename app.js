@@ -1,8 +1,9 @@
-/* YouTube Doctor — one dashboard, driven by the agent.
+/* Room OS — one input, one surface.
  * The human tells Brodie what to do in the command bar; the dashboard builds
- * itself around the request. Left icons are manual shortcuts only.
- * Stages: home | watch | build | files. The agent composes the stage with the
- * show_stage tool, then fills it with the other tools — no clicking needed.
+ * itself around the request. The thread lives in a drawer (a log, not a
+ * column). The agent drives the stage through ONE shared runCommand(),
+ * whether it arrives via WebMCP tools or the /api/stage/command inbox —
+ * and the page posts receipts so the loop is closed.
  */
 (function () {
   "use strict";
@@ -14,6 +15,11 @@
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
+  }
+
+  function trunc(s, n) {
+    s = String(s || "").replace(/\s+/g, " ").trim();
+    return s.length > n ? s.slice(0, n) + "…" : s;
   }
 
   function fmtDate(iso) {
@@ -53,8 +59,7 @@
   });
 
   /* ---------------- stages: home | watch | build | files ----------------
-   * The agent composes the stage with show_stage. The icon rail is the
-   * manual fallback — same function, for when the human wants to click. */
+   * The agent composes the stage. The tabs are the quiet manual fallback. */
 
   var STAGES = ["home", "watch", "build", "files"];
   var stage = "home";
@@ -67,6 +72,7 @@
     if (STAGES.indexOf(next) === -1) next = "home";
     stage = next;
     try { localStorage.setItem("ydoc_stage", stage); } catch (e) { /* ignore */ }
+    document.body.setAttribute("data-stage", stage);
     var panes = {
       home: $("#home-stage"),
       watch: $("#watch-stage"),
@@ -74,7 +80,7 @@
       files: $("#files-stage")
     };
     STAGES.forEach(function (s) { panes[s].hidden = s !== stage; });
-    Array.prototype.forEach.call(document.querySelectorAll(".icon-btn"), function (b) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-stage]"), function (b) {
       var on = b.getAttribute("data-stage") === stage;
       b.classList.toggle("active", on);
       b.setAttribute("aria-pressed", on ? "true" : "false");
@@ -82,11 +88,33 @@
     if (stage === "files") renderFilesStage();
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll(".icon-btn"), function (b) {
-    b.addEventListener("click", function () { setStage(b.getAttribute("data-stage")); });
+  Array.prototype.forEach.call(document.querySelectorAll(".stage-tabs button, .drawer-stages button"), function (b) {
+    b.addEventListener("click", function () {
+      setStage(b.getAttribute("data-stage"));
+      closeDrawer();
+    });
   });
+  $("#brand-home").addEventListener("click", function () { setStage("home"); });
 
-  /* ---------------- agent presence: the dashboard feels alive ---------------- */
+  /* ---------------- stage banner: the agent's hand on the stage ---------------- */
+
+  var bannerTimer = null;
+  var optimisticTimer = null;
+  function showBanner(html, ms) {
+    var el = $("#stage-banner");
+    el.innerHTML = '<span class="banner-dot"></span><span>' + html + "</span>";
+    el.hidden = false;
+    if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
+    if (ms > 0) bannerTimer = setTimeout(clearBanner, ms);
+  }
+  function clearBanner() {
+    if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
+    if (optimisticTimer) { clearTimeout(optimisticTimer); optimisticTimer = null; }
+    $("#stage-banner").hidden = true;
+  }
+  function agentBanner(text) { showBanner("<b>Brodie</b> · " + esc(text), 6000); }
+
+  /* ---------------- agent presence ---------------- */
 
   var activityOverride = "";
 
@@ -94,25 +122,22 @@
     activityOverride = text;
     $("#agent-activity").textContent = text;
   }
-
   function clearActivityOverride() { activityOverride = ""; }
 
   function summarizeAgentMessage(m) {
-    if (m.kind === "command") return "rearranged the dashboard";
     if (m.kind === "result" && m.video_ids && m.video_ids.length) {
       var n = m.video_ids.length;
       return "shared " + n + " video" + (n === 1 ? "" : "s");
     }
-    var t = (m.text || "").replace(/\s+/g, " ").trim();
-    return t.length > 46 ? t.slice(0, 46) + "…" : (t || "did something");
+    return trunc(m.text, 46) || "did something";
   }
 
-  /** The activity line follows the latest thing the agent did in the room. */
   function updatePresence(messages) {
     clearActivityOverride();
-    var line = "online — say hi in the chat";
+    var line = "online — talk in the command bar";
     for (var i = messages.length - 1; i >= 0; i--) {
       var m = messages[i];
+      if (isHiddenCommand(m) || m.kind === "system") continue;
       if (!m.name || m.name === me) continue;
       line = summarizeAgentMessage(m);
       break;
@@ -123,7 +148,6 @@
   function pulseAvatar() {
     var a = $("#agent-avatar");
     a.classList.remove("pulse");
-    // Force reflow so a second pulse restarts the animation.
     void a.offsetWidth;
     a.classList.add("pulse");
     setTimeout(function () { a.classList.remove("pulse"); }, 2200);
@@ -131,28 +155,17 @@
 
   function showTyping(on) { $("#typing").hidden = !on; }
 
-  /* ---------------- channel badge ---------------- */
-
-  function loadChannel() {
-    api("/api/tools/channel").then(function (data) {
-      var c = data.channel || {};
-      $("#channel-line").textContent = c.title || "searching all of YouTube";
-      $("#demo-badge").hidden = !c.demo;
-    }).catch(function () {
-      $("#channel-line").textContent = "channel unavailable";
-    });
-  }
-
   /* ---------------- video cards + players (generative UI) ---------------- */
 
   function cardHTML(v) {
     return (
       '<article class="card" data-video-id="' + esc(v.video_id) + '" tabindex="0" role="button" aria-label="Play ' + esc(v.title) + '">' +
+        '<button type="button" class="card-dock" data-dock="' + esc(v.video_id) + '" title="Keep playing while you work">Dock</button>' +
         '<img src="' + esc(v.thumbnail_url) + '" alt="" loading="lazy">' +
         '<div class="card-body">' +
           '<p class="card-title">' + esc(v.title) + "</p>" +
           '<div class="card-meta"><span>' + esc(fmtDate(v.published_at)) + "</span><span>" + esc(v.duration || "") + "</span>" +
-          (v.demo ? '<span class="badge badge-demo">demo</span>' : "") +
+          (v.demo ? '<span class="badge-demo">demo</span>' : "") +
           "</div>" +
         "</div>" +
       "</article>"
@@ -160,6 +173,12 @@
   }
 
   function wireCards(container, playFn) {
+    Array.prototype.forEach.call(container.querySelectorAll(".card-dock"), function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        dockVideo(btn.getAttribute("data-dock"));
+      });
+    });
     Array.prototype.forEach.call(container.querySelectorAll(".card"), function (el) {
       function go() { playFn(el.getAttribute("data-video-id")); }
       el.addEventListener("click", go);
@@ -169,8 +188,6 @@
     });
   }
 
-  /** Render video cards into the results area. switchStage=false keeps the
-   *  current stage (used when mirroring old messages on page load). */
   function displayVideosOnPage(videos, switchStage) {
     if (switchStage !== false && stage !== "watch") setStage("watch");
     var box = $("#results");
@@ -180,11 +197,9 @@
     }
     box.innerHTML = videos.map(cardHTML).join("");
     wireCards(box, playVideoOnPage);
-    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     return videos.length;
   }
 
-  /** Load a video into the embedded player. Called by the play_video tool. */
   function playVideoOnPage(videoId) {
     if (!videoId) return null;
     if (stage !== "watch") setStage("watch");
@@ -197,7 +212,6 @@
         $("#now-playing").textContent = "▶ " + (data.video ? data.video.title : videoId);
       })
       .catch(function () { $("#now-playing").textContent = "▶ " + videoId; });
-    $("#player-section").scrollIntoView({ behavior: "smooth", block: "center" });
     return videoId;
   }
 
@@ -221,18 +235,25 @@
 
   $("#trending-btn").addEventListener("click", runTrending);
 
-  /* ---------------- docked mini player: video keeps playing while you build ---------------- */
+  /* ---------------- docked mini player ---------------- */
 
   function dockVideo(videoId) {
     if (!videoId) return null;
-    var frame = $("#dock-player");
-    frame.src = "https://www.youtube.com/embed/" + encodeURIComponent(videoId) + "?autoplay=1&rel=0";
-    $("#dock").hidden = false;
+    var dock = $("#dock");
+    dock.dataset.videoId = videoId;
+    $("#dock-player").src = "https://www.youtube.com/embed/" + encodeURIComponent(videoId) + "?autoplay=1&rel=0";
+    dock.hidden = false;
     $("#dock-title").textContent = "Loading…";
+    $("#dock-thumb").hidden = true;
     api("/api/tools/details?id=" + encodeURIComponent(videoId)).then(function (data) {
-      var title = data.video ? data.video.title : videoId;
-      $("#dock-title").textContent = title;
-      setActivity("▶ " + title);
+      var v = data.video || {};
+      $("#dock-title").textContent = v.title || videoId;
+      if (v.thumbnail_url) {
+        var th = $("#dock-thumb");
+        th.src = v.thumbnail_url;
+        th.hidden = false;
+      }
+      setActivity("▶ " + (v.title || videoId));
       setTimeout(clearActivityOverride, 8000);
     }).catch(function () {
       $("#dock-title").textContent = videoId;
@@ -240,107 +261,30 @@
     return videoId;
   }
 
-  $("#dock-close").addEventListener("click", function () {
+  $("#dock-close").addEventListener("click", function (ev) {
+    ev.stopPropagation();
     $("#dock-player").src = "";
     $("#dock").hidden = true;
+    delete $("#dock").dataset.videoId;
   });
 
-  // Dock-a-video search, in the Build toolbar.
-  var dockSearchTimer = null;
-  function hideDockResults() { $("#dock-results").hidden = true; }
-
-  $("#dock-search-form").addEventListener("submit", function (ev) {
-    ev.preventDefault();
-    var qv = $("#dock-search-input").value.trim();
-    if (!qv) return;
-    var box = $("#dock-results");
-    box.innerHTML = '<div class="dock-result-row muted">Searching…</div>';
-    box.hidden = false;
-    api("/api/tools/search?q=" + encodeURIComponent(qv) + "&max=5").then(function (data) {
-      var vs = data.videos || [];
-      if (!vs.length) { box.innerHTML = '<div class="dock-result-row muted">No videos found.</div>'; return; }
-      box.innerHTML = vs.map(function (v) {
-        return '<div class="dock-result-row" data-video-id="' + esc(v.video_id) + '" role="button" tabindex="0">' +
-          '<img src="' + esc(v.thumbnail_url) + '" alt="" loading="lazy">' +
-          '<span class="dock-result-title">' + esc(v.title) + "</span></div>";
-      }).join("");
-      Array.prototype.forEach.call(box.querySelectorAll("[data-video-id]"), function (el) {
-        function pick() {
-          dockVideo(el.getAttribute("data-video-id"));
-          hideDockResults();
-          $("#dock-search-input").value = "";
-        }
-        el.addEventListener("click", pick);
-        el.addEventListener("keydown", function (kev) {
-          if (kev.key === "Enter" || kev.key === " ") { kev.preventDefault(); pick(); }
-        });
-      });
-    }).catch(function (err) {
-      box.innerHTML = '<div class="dock-result-row muted">Search failed: ' + esc(err.message) + "</div>";
-    });
+  // On the phone the dock is a slim strip: tap to expand into the big player.
+  $("#dock").addEventListener("click", function (ev) {
+    if (ev.target.closest("#dock-close")) return;
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    var id = $("#dock").dataset.videoId;
+    if (id) playVideoOnPage(id);
   });
 
-  document.addEventListener("click", function (ev) {
-    var wrap = document.querySelector(".dock-search-wrap");
-    if (wrap && !wrap.contains(ev.target)) hideDockResults();
-  });
-  document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") hideDockResults();
-  });
-  $("#dock-search-input").addEventListener("input", function () {
-    if (dockSearchTimer) clearTimeout(dockSearchTimer);
-    dockSearchTimer = setTimeout(hideDockResults, 4000);
-  });
-
-  /* ---------------- file tree (Files / Skills / Plugins) ---------------- */
+  /* ---------------- files stage: the studio as a browser ---------------- */
 
   var ROOTS = [
-    { name: "Files", icon: "▤", prefix: null },
-    { name: "Skills", icon: "✦", prefix: "skills/" },
-    { name: "Plugins", icon: "⬡", prefix: "plugins/" }
+    { name: "Files", prefix: null },
+    { name: "Skills", prefix: "skills/" },
+    { name: "Plugins", prefix: "plugins/" }
   ];
 
-  var expanded = {};
-  var selectedPath = null;
   var treeFiles = [];
-  var treeLoaded = false;
-
-  function fileIcon(path) {
-    if (/\.md$/i.test(path)) return "✎";
-    if (/\.html?$/i.test(path)) return "◧";
-    if (/\.css$/i.test(path)) return "◈";
-    if (/\.(js|ts|tsx|jsx)$/i.test(path)) return "❖";
-    if (/\.json$/i.test(path)) return "{ }";
-    return "◦";
-  }
-
-  function newNode(name, key) {
-    return { name: name, key: key, dirs: [], files: [] };
-  }
-
-  function insertPath(node, relPath, fullPath) {
-    var parts = relPath.split("/");
-    var cur = node;
-    var key = node.key;
-    for (var i = 0; i < parts.length - 1; i++) {
-      key += "/" + parts[i];
-      var child = null;
-      for (var j = 0; j < cur.dirs.length; j++) {
-        if (cur.dirs[j].name === parts[i]) { child = cur.dirs[j]; break; }
-      }
-      if (!child) { child = newNode(parts[i], key); cur.dirs.push(child); }
-      cur = child;
-    }
-    cur.files.push({ name: parts[parts.length - 1], path: fullPath });
-    if (!(node.key in expanded)) expanded[node.key] = true;
-  }
-
-  function sortNode(node) {
-    var byName = function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; };
-    node.dirs.sort(byName);
-    node.files.sort(byName);
-    node.dirs.forEach(sortNode);
-  }
 
   function relFor(root, path) {
     if (root.prefix) {
@@ -351,87 +295,19 @@
     return path;
   }
 
-  function renderTree() {
-    var box = $("#tree");
-    var roots = ROOTS.map(function (r, i) {
-      var node = newNode(r.name, "root" + i);
-      treeFiles.forEach(function (f) {
-        var rel = relFor(r, f.path);
-        if (rel) insertPath(node, rel, f.path);
-      });
-      sortNode(node);
-      return { def: r, node: node };
-    });
-
-    var html = "";
-    function renderNode(node, depth) {
-      var out = "";
-      node.dirs.forEach(function (d) {
-        var open = expanded[d.key] !== false;
-        out += '<div class="tree-row tree-dir" role="treeitem" aria-expanded="' + open + '" data-dirkey="' + esc(d.key) + '"' +
-          ' style="--depth:' + depth + '"><span class="twisty">' + (open ? "▾" : "▸") + "</span>" +
-          '<span class="tree-label">' + esc(d.name) + "</span></div>";
-        if (open) out += renderNode(d, depth + 1);
-      });
-      node.files.forEach(function (f) {
-        var sel = f.path === selectedPath ? " selected" : "";
-        out += '<div class="tree-row tree-file' + sel + '" role="treeitem" data-path="' + esc(f.path) + '"' +
-          ' style="--depth:' + depth + '"><span class="tree-file-icon">' + esc(fileIcon(f.path)) + "</span>" +
-          '<span class="tree-label">' + esc(f.name) + "</span></div>";
-      });
-      return out;
-    }
-
-    roots.forEach(function (r) {
-      var open = expanded[r.node.key] !== false;
-      html += '<div class="tree-root"><div class="tree-row tree-dir tree-root-row" role="treeitem" aria-expanded="' + open + '"' +
-        ' data-dirkey="' + esc(r.node.key) + '"><span class="twisty">' + (open ? "▾" : "▸") + "</span>" +
-        '<span class="tree-root-icon">' + esc(r.def.icon) + '</span><span class="tree-label">' + esc(r.def.name) + "</span></div>";
-      if (open) html += renderNode(r.node, 1);
-      html += "</div>";
-    });
-
-    box.innerHTML = html || '<div class="empty">No files yet.</div>';
-
-    Array.prototype.forEach.call(box.querySelectorAll("[data-dirkey]"), function (el) {
-      el.addEventListener("click", function () {
-        var k = el.getAttribute("data-dirkey");
-        expanded[k] = !(expanded[k] !== false);
-        renderTree();
-      });
-    });
-    Array.prototype.forEach.call(box.querySelectorAll("[data-path]"), function (el) {
-      el.addEventListener("click", function () {
-        openFile(el.getAttribute("data-path"));
-      });
-    });
-  }
-
-  function loadTree() {
-    treeLoaded = true;
-    var status = $("#tree-status");
-    status.textContent = "loading…";
+  function loadFiles() {
     api("/api/studio/files").then(function (data) {
       treeFiles = data.files || [];
-      renderTree();
-      status.textContent = treeFiles.length + (treeFiles.length === 1 ? " file" : " files");
       if (stage === "files") renderFilesStage();
-    }).catch(function (err) {
-      status.textContent = "couldn't load files: " + err.message;
-      $("#tree").innerHTML = '<div class="empty">Files unavailable — is the database connected?</div>';
-    });
+    }).catch(function () { /* the stage shows its own empty state */ });
   }
 
-  function refreshTreeKeepSelection() {
+  function refreshFiles() {
     api("/api/studio/files").then(function (data) {
       treeFiles = data.files || [];
-      renderTree();
-      $("#tree-status").textContent = treeFiles.length + (treeFiles.length === 1 ? " file" : " files");
       if (stage === "files") renderFilesStage();
-    }).catch(function () { /* keep old tree on transient failure */ });
+    }).catch(function () { /* keep old list on transient failure */ });
   }
-
-  /* ---------------- files stage: the studio as a browser ---------------- */
 
   function renderFilesStage() {
     var box = $("#files-browser");
@@ -443,21 +319,19 @@
         return relFor(r, f.path) && (!q || f.path.toLowerCase().indexOf(q) !== -1);
       });
       if (!list.length) return;
-      html += '<div class="files-group"><div class="files-group-head"><span class="tree-root-icon">' +
-        esc(r.icon) + '</span><span class="files-group-name">' + esc(r.name) + '</span>' +
-        '<span class="files-count">' + list.length + "</span></div>";
+      html += '<div class="files-group"><div class="files-group-head"><span class="files-group-name">' +
+        esc(r.name) + '</span><span class="files-count">' + list.length + "</span></div>";
       html += list.map(function (f) {
         var name = f.path.split("/").pop();
         return '<div class="file-row" data-path="' + esc(f.path) + '" role="button" tabindex="0">' +
-          '<span class="tree-file-icon">' + esc(fileIcon(f.path)) + "</span>" +
           '<span class="file-row-main"><span class="file-row-name">' + esc(name) + "</span>" +
-          '<span class="file-row-path muted">' + esc(f.path) + "</span></span>" +
-          (f.updated_at ? '<span class="file-row-date muted">' + esc(fmtDate(f.updated_at)) + "</span>" : "") +
+          '<span class="file-row-path">' + esc(f.path) + "</span></span>" +
+          (f.updated_at ? '<span class="file-row-date">' + esc(fmtDate(f.updated_at)) + "</span>" : "") +
           "</div>";
       }).join("");
       html += "</div>";
     });
-    box.innerHTML = html || '<div class="empty">No files found.</div>';
+    box.innerHTML = html || '<div class="empty">No files yet — tell Brodie to build something.</div>';
     Array.prototype.forEach.call(box.querySelectorAll("[data-path]"), function (el) {
       function go() { openFile(el.getAttribute("data-path")); }
       el.addEventListener("click", go);
@@ -486,7 +360,9 @@
     $("#preview-toggle").hidden = !(has && isHtmlPath(currentPath));
     $("#editor-empty").hidden = has;
     $("#editor").hidden = !has || previewOn;
-    $("#preview").hidden = !has || !previewOn;
+    var pv = $("#preview");
+    pv.hidden = !has || !previewOn || !isHtmlPath(currentPath);
+    if (!pv.hidden) pv.srcdoc = $("#editor").value;
     $("#preview-toggle").textContent = previewOn ? "Edit" : "Preview";
     $("#save-file-btn").disabled = !dirty;
   }
@@ -496,18 +372,17 @@
     $("#save-status").textContent = "";
   }
 
-  function openFile(path) {
+  function openFile(path, opts) {
     if (stage !== "build") setStage("build");
-    selectedPath = path;
     currentPath = path;
     dirty = false;
-    previewOn = false;
-    renderTree();
+    previewOn = !!(opts && opts.preview);
     updateEditorChrome();
     $("#save-status").textContent = "loading…";
     api("/api/studio/files?path=" + encodeURIComponent(path)).then(function (data) {
       $("#editor").value = data.content || "";
       $("#save-status").textContent = "";
+      updateEditorChrome();
     }).catch(function (err) {
       if (/not found/i.test(err.message)) {
         $("#editor").value = "";
@@ -517,8 +392,6 @@
       } else {
         $("#save-status").textContent = "couldn't open file: " + err.message;
         currentPath = null;
-        selectedPath = null;
-        renderTree();
         updateEditorChrome();
       }
     });
@@ -541,7 +414,7 @@
       $("#save-status").textContent = "saved ✓ " + hh + ":" + mm;
       setActivity("saved " + currentPath);
       setTimeout(clearActivityOverride, 6000);
-      refreshTreeKeepSelection();
+      refreshFiles();
     }).catch(function (err) {
       $("#save-status").textContent = "save failed: " + err.message;
       btn.disabled = false;
@@ -554,13 +427,12 @@
     api("/api/studio/files?path=" + encodeURIComponent(currentPath), { method: "DELETE" })
       .then(function () {
         currentPath = null;
-        selectedPath = null;
         dirty = false;
         previewOn = false;
         $("#editor").value = "";
         $("#save-status").textContent = "";
         updateEditorChrome();
-        refreshTreeKeepSelection();
+        refreshFiles();
       })
       .catch(function (err) {
         $("#save-status").textContent = "delete failed: " + err.message;
@@ -580,7 +452,6 @@
   $("#delete-file-btn").addEventListener("click", deleteCurrentFile);
   $("#preview-toggle").addEventListener("click", function () {
     previewOn = !previewOn;
-    if (previewOn) $("#preview").srcdoc = $("#editor").value;
     updateEditorChrome();
   });
   document.addEventListener("keydown", function (ev) {
@@ -589,10 +460,72 @@
     }
   });
 
-  $("#new-file-btn").addEventListener("click", promptNewFile);
+  $("#editor-new-btn").addEventListener("click", promptNewFile);
   $("#files-new-btn").addEventListener("click", promptNewFile);
 
-  /* ---------------- shared room chat + agent aliveness ---------------- */
+  /* ---------------- the closed command loop ----------------
+   * ONE executor for every path: WebMCP tools, the /api/stage/command
+   * inbox, and legacy kind:"command" chat messages. After executing, the
+   * page posts a kind:"system" receipt so the agent sees the ack. */
+
+  var executedCommands = {};
+
+  function postReceipt(text) {
+    api("/api/chat/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "room", text: text, kind: "system" })
+    }).catch(function () { /* receipts are best-effort */ });
+  }
+
+  function runCommand(cmd) {
+    var a = cmd.action;
+    if (a === "show_stage" && typeof cmd.view === "string") {
+      setStage(cmd.view);
+      return { receipt: "stage → " + stage + " ✓", banner: "switched to " + stage };
+    }
+    if (a === "open_file" && typeof cmd.path === "string") {
+      openFile(cmd.path);
+      return { receipt: "opened " + cmd.path + " ✓", banner: "opened " + cmd.path };
+    }
+    if (a === "preview_file" && typeof cmd.path === "string") {
+      openFile(cmd.path, { preview: true });
+      return { receipt: "previewing " + cmd.path + " ✓", banner: "previewing " + cmd.path };
+    }
+    if (a === "dock" && typeof cmd.video_id === "string") {
+      dockVideo(cmd.video_id);
+      return { receipt: "docked video ✓", banner: "docked a video — it keeps playing while you work" };
+    }
+    throw new Error("unknown action: " + a);
+  }
+
+  function execCommandMessage(m) {
+    if (executedCommands[m.id]) return;
+    executedCommands[m.id] = true;
+    var cmd = null;
+    try { cmd = JSON.parse(m.text); } catch (e) { /* not JSON — just hide it */ }
+    if (!cmd || !cmd.action) return;
+    try {
+      var r = runCommand(cmd);
+      clearBanner();
+      agentBanner(r.banner);
+      postReceipt(r.receipt);
+    } catch (e) {
+      postReceipt("command failed: " + e.message);
+    }
+  }
+
+  function runAgentCommands(messages) {
+    for (var i = 0; i < messages.length; i++) {
+      var m = messages[i];
+      if (m.kind === "command" && m.name === "Brodie") { execCommandMessage(m); continue; }
+      // Malformed control JSON posted as chat: hide it, and only honor it
+      // if it's fresh (stale pollution from earlier sessions stays buried).
+      if (isHiddenCommand(m) && m.kind !== "command" && m.ts > bootTs) execCommandMessage(m);
+    }
+  }
+
+  /* ---------------- shared room chat: the thread is a log ---------------- */
 
   var chatConfigured = true;
   var lastRenderedIds = "";
@@ -601,9 +534,15 @@
   var lastAgentMsgId = "";
   var paintTimer = null;
 
-  /** Mirror an agent's result message into the results area as full video
-   *  cards, so shared videos feel like generative UI — not just chat.
-   *  Only yanks the stage if the message arrived while you were here. */
+  /** A message is a control message — never rendered — when it's an
+   *  explicit kind:"command", or when Brodie posted something that looks
+   *  like {"action": ...} as plain chat (the old pollution). */
+  function isHiddenCommand(m) {
+    if (!m) return false;
+    if (m.kind === "command") return true;
+    return m.name === "Brodie" && /^\s*\{\s*"action"\s*:/.test(m.text || "");
+  }
+
   function mirrorResultToResults(msg) {
     if (!msg || msg.id === lastMirroredResultId) return;
     if (!(msg.ts > lastLocalSearchTs)) return;
@@ -622,88 +561,100 @@
   function newestAgentMessage(messages) {
     for (var i = messages.length - 1; i >= 0; i--) {
       var m = messages[i];
-      if (m.kind === "command") continue; // invisible control messages
+      if (isHiddenCommand(m) || m.kind === "system") continue;
       if (m.name && m.name !== me) return m;
     }
     return null;
   }
 
-  /* ------- remote agent control: the agent composes the dashboard -------
-   * The in-room agent (posting as "Brodie") can drive the stage by sending
-   * chat messages with kind:"command" and a JSON body, e.g.
-   *   {"action":"show_stage","view":"build"}
-   *   {"action":"open_file","path":"notes.md"}
-   *   {"action":"dock","video_id":"dQw4w9WgXcQ"}
-   * Commands are invisible in the chat and run once, newest-first. Only
-   * messages from the agent name are honored. */
-  var executedCommands = {};
-  function runAgentCommands(messages) {
-    for (var i = 0; i < messages.length; i++) {
-      var m = messages[i];
-      if (m.kind !== "command" || m.name !== "Brodie" || executedCommands[m.id]) continue;
-      executedCommands[m.id] = true;
-      var cmd = null;
-      try { cmd = JSON.parse(m.text); } catch (e) { cmd = null; }
-      if (!cmd || !cmd.action) continue;
-      try {
-        if (cmd.action === "show_stage" && typeof cmd.view === "string") setStage(cmd.view);
-        else if (cmd.action === "open_file" && typeof cmd.path === "string") openFile(cmd.path);
-        else if (cmd.action === "dock" && typeof cmd.video_id === "string") dockVideo(cmd.video_id);
-      } catch (e) { /* a bad command never breaks the room */ }
+  function msgHTML(m) {
+    if (m.kind === "system") {
+      return '<div class="msg sys">' + esc(m.text) + "</div>";
     }
+    var head;
+    if (m.name === me) {
+      head = '<div class="msg-head"><span class="who">' + esc(m.name) + "</span></div>";
+    } else {
+      head = '<div class="msg-head"><span class="msg-avatar">B</span>' +
+        '<span class="who">' + esc(m.name || "Brodie") + "</span></div>";
+    }
+    var cls = "msg" + (m.name === me ? " mine" : "") + (m.kind === "result" ? " result" : "");
+    var html = '<div class="' + cls + '">' + head;
+    if (m.kind !== "result" || m.text) html += '<div class="msg-text">' + esc(m.text) + "</div>";
+    if (m.kind === "result" && m.video_ids && m.video_ids.length) {
+      html += '<div class="result-cards" data-ids="' + esc(m.video_ids.slice(0, 6).join(",")) + '"></div>';
+    }
+    return html + "</div>";
+  }
+
+  function paintResultCards() {
+    Array.prototype.forEach.call(document.querySelectorAll(".result-cards"), function (el) {
+      if (el.dataset.done) return;
+      el.dataset.done = "1";
+      var ids = (el.getAttribute("data-ids") || "").split(",").filter(Boolean);
+      Promise.all(ids.map(function (id) {
+        return api("/api/tools/details?id=" + encodeURIComponent(id))
+          .then(function (data) { return data.video || null; })
+          .catch(function () { return null; });
+      })).then(function (videos) {
+        videos = videos.filter(function (v) { return !!v; });
+        if (!videos.length) { el.innerHTML = '<div class="empty">Videos unavailable.</div>'; return; }
+        el.innerHTML = videos.map(cardHTML).join("");
+        wireCards(el, stage === "build" ? dockVideo : playVideoOnPage);
+      });
+    });
   }
 
   function renderMessages(messages) {
     var ids = messages.map(function (m) { return m.id; }).join(",");
-    if (ids === lastRenderedIds) return; // nothing new
+    if (ids === lastRenderedIds) return;
     lastRenderedIds = ids;
 
     // A fresh agent message: typing indicator + avatar pulse, then paint.
     var agent = newestAgentMessage(messages);
-    var fresh = agent && agent.id !== lastAgentMsgId;
+    var freshAgent = !!(agent && agent.id !== lastAgentMsgId);
     if (agent) lastAgentMsgId = agent.id;
 
     if (paintTimer) { clearTimeout(paintTimer); paintTimer = null; }
-    if (fresh) {
+    if (freshAgent) {
       pulseAvatar();
       showTyping(true);
+      clearBanner();
       paintTimer = setTimeout(function () {
         paintTimer = null;
         showTyping(false);
-        paintMessages(messages);
+        paintMessages(messages, true);
       }, 1300);
     } else {
-      paintMessages(messages);
+      paintMessages(messages, false);
     }
     runAgentCommands(messages);
   }
 
-  function paintMessages(messages) {
+  function paintMessages(messages, freshAgent) {
     var box = $("#messages");
-    if (messages.length === 0) {
-      box.innerHTML = '<div class="empty">No messages yet — say hello.</div>';
-      updatePresence(messages);
-      return;
+    var visible = messages.filter(function (m) { return !isHiddenCommand(m); });
+    if (visible.length === 0) {
+      box.innerHTML = '<div class="empty">No messages yet — say hello in the command bar.</div>';
+    } else {
+      box.innerHTML = visible.map(msgHTML).join("");
+      paintResultCards();
     }
-    box.innerHTML = messages.map(function (m) {
-      if (m.kind === "command") return ""; // invisible control messages
-      var cls = "msg" + (m.name === me ? " mine" : "") + (m.kind === "result" ? " result" : "");
-      var html = '<div class="' + cls + '"><div class="who">' + esc(m.name) + "</div>" +
-        '<div class="bubble">' + esc(m.text) + "</div>";
-      if (m.kind === "result" && m.video_ids && m.video_ids.length) {
-        html += '<div class="mini-cards">' + m.video_ids.map(function (id) {
-          return '<article class="card mini" data-video-id="' + esc(id) + '" tabindex="0" role="button" aria-label="Play video">' +
-            '<div class="card-body"><p class="card-title">▶ ' + (stage === "build" ? "Dock" : "Watch") + " video</p>" +
-            '<div class="card-meta"><span>' + esc(id) + "</span></div></div></article>";
-        }).join("") + "</div>";
-      }
-      return html + "</div>";
-    }).join("");
-    // Chat video cards follow the current stage: Build docks, everything else plays big.
-    wireCards(box, stage === "build" ? dockVideo : playVideoOnPage);
-    box.scrollTop = box.scrollHeight;
     updatePresence(messages);
-    // Mirror the newest agent result into the results area as full cards.
+
+    var drawerOpen = !$("#agent-drawer").hidden;
+    if (drawerOpen) {
+      box.scrollTop = box.scrollHeight;
+    } else if (freshAgent) {
+      // Fresh agent activity while the thread is closed: nudge, don't yank.
+      var agent = newestAgentMessage(messages);
+      if (agent) {
+        unread++;
+        updateUnread();
+        showToast("<b>" + esc(agent.name || "Brodie") + "</b> · " + esc(trunc(agent.text, 90)));
+      }
+    }
+
     for (var i = messages.length - 1; i >= 0; i--) {
       var m = messages[i];
       if (m.kind === "result" && m.video_ids && m.video_ids.length) { mirrorResultToResults(m); break; }
@@ -714,11 +665,9 @@
     api("/api/chat/messages").then(function (data) {
       chatConfigured = data.configured !== false;
       $("#chat-setup").hidden = chatConfigured;
-      $("#chat-form").style.display = chatConfigured ? "" : "none";
-      $("#chat-hint").textContent = chatConfigured ? "synced across devices" : "";
       if (chatConfigured) renderMessages(data.messages || []);
     }).catch(function () {
-      $("#chat-hint").textContent = "chat unavailable";
+      $("#chat-setup").hidden = false;
     });
   }
 
@@ -731,25 +680,62 @@
     }).then(function (data) {
       loadMessages();
       return data.message;
-    }).catch(function (err) {
-      $("#chat-hint").textContent = "send failed: " + err.message;
+    }).catch(function () {
+      showBanner("Couldn't reach the room — try again.", 5000);
       return null;
     });
   }
 
-  $("#chat-form").addEventListener("submit", function (ev) {
-    ev.preventDefault();
-    var input = $("#chat-input");
-    var v = input.value.trim();
-    if (!v) return;
-    input.value = "";
-    postChat(v);
+  /* ---------------- agent drawer + toast ---------------- */
+
+  var unread = 0;
+  function updateUnread() {
+    var b = $("#unread-badge");
+    b.hidden = unread <= 0;
+    b.textContent = unread > 9 ? "9+" : String(unread);
+  }
+
+  function openDrawer() {
+    $("#agent-drawer").hidden = false;
+    $("#agent-scrim").hidden = false;
+    unread = 0;
+    updateUnread();
+    hideToast();
+    var box = $("#messages");
+    box.scrollTop = box.scrollHeight;
+  }
+  function closeDrawer() {
+    $("#agent-drawer").hidden = true;
+    $("#agent-scrim").hidden = true;
+  }
+
+  $("#agent-presence").addEventListener("click", function () {
+    if ($("#agent-drawer").hidden) openDrawer(); else closeDrawer();
+  });
+  $("#agent-presence").addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); $("#agent-presence").click(); }
+  });
+  $("#drawer-close").addEventListener("click", closeDrawer);
+  $("#agent-scrim").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && !$("#agent-drawer").hidden) closeDrawer();
   });
 
-  /* ---------------- command bar: the primary interface ----------------
-   * Every command goes into the room (the agent sees it). For video
-   * requests the dashboard also searches directly, so it works with no
-   * agent in the loop — and the stage composes itself. */
+  var toastTimer = null;
+  function showToast(html) {
+    var t = $("#agent-toast");
+    t.innerHTML = html;
+    t.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 7000);
+  }
+  function hideToast() {
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+    $("#agent-toast").hidden = true;
+  }
+  $("#agent-toast").addEventListener("click", openDrawer);
+
+  /* ---------------- command bar: the primary interface ---------------- */
 
   function stripCommandVerbs(v) {
     var q = v
@@ -761,6 +747,12 @@
 
   var VIDEO_WORDS = /\b(video|videos|watch|youtube|lofi|song|songs|music|clip|trailer|tutorial|beats|podcast)\b/i;
   var FILE_WORDS = /\b(files?|skills?|plugins?|file tree|explorer)\b/i;
+
+  function optimisticWorking(text) {
+    showBanner("On it — " + esc(trunc(text, 70)), 0);
+    if (optimisticTimer) clearTimeout(optimisticTimer);
+    optimisticTimer = setTimeout(clearBanner, 30000);
+  }
 
   function runSearch(q) {
     lastLocalSearchTs = Date.now();
@@ -780,25 +772,27 @@
   function handleCommand(text) {
     var v = (text || "").trim();
     if (!v) return;
+    optimisticWorking(v);
     postChat(v);
     var low = v.toLowerCase();
-    if (/\btrend/.test(low)) { runTrending(); return; }
+    // Local shortcuts: the stage change itself is the feedback.
+    if (/\btrend/.test(low)) { clearBanner(); runTrending(); return; }
     if (/\bdock\b/.test(low) && VIDEO_WORDS.test(low)) {
-      // "dock some lofi while I work": park the top result, stay put.
       var q = stripCommandVerbs(v);
       lastLocalSearchTs = Date.now();
       setActivity("docking a video…");
       api("/api/tools/search?q=" + encodeURIComponent(q) + "&max=1").then(function (data) {
         var vids = data.videos || [];
         if (vids.length) dockVideo(vids[0].video_id);
+        clearBanner();
         clearActivityOverride();
-      }).catch(function () { clearActivityOverride(); });
+      }).catch(function () { clearBanner(); clearActivityOverride(); });
       return;
     }
-    if (FILE_WORDS.test(low) && !VIDEO_WORDS.test(low)) { setStage("files"); return; }
+    if (FILE_WORDS.test(low) && !VIDEO_WORDS.test(low)) { clearBanner(); setStage("files"); return; }
     if (VIDEO_WORDS.test(low)) { runSearch(stripCommandVerbs(v)); return; }
-    // Otherwise the message just sits in the room: if the agent is around,
-    // it composes the dashboard with show_stage + the other tools.
+    // Otherwise the message sits in the room: the agent composes the
+    // dashboard with the command inbox + the other tools.
   }
 
   $("#command-form").addEventListener("submit", function (ev) {
@@ -806,16 +800,27 @@
     var input = $("#command-input");
     handleCommand(input.value);
     input.value = "";
+    input.blur();
   });
 
   Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (c) {
     c.addEventListener("click", function () { handleCommand(c.getAttribute("data-cmd")); });
   });
 
+  /* Manual search on the watch stage (content search, not an agent command). */
+  $("#watch-search-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var input = $("#watch-search-input");
+    var q = input.value.trim();
+    if (!q) return;
+    input.blur();
+    runSearch(q);
+  });
+
   /* ---------------- WebMCP tool surface ----------------
-   * These descriptions teach the agent the generative-UI pattern:
-   * the human should never have to click — the agent calls show_stage
-   * to compose the dashboard, then fills it with the other tools. */
+   * Teach the agent the generative-UI pattern: the human never clicks —
+   * compose the stage first, fill it second, and always finish the last
+   * click yourself (preview_file after writing HTML, play/dock directly). */
 
   function webmcpSupported() {
     try {
@@ -826,7 +831,7 @@
   var TOOLS = [
     {
       name: "show_stage",
-      description: "Reconfigure the dashboard stage for the human — they should never have to click around. When the human asks to do something, call this FIRST to bring up the right surface, then fill it with the other tools. Views: 'home' (welcome screen with suggestion chips), 'watch' (video results + player), 'build' (code editor), 'files' (file browser). Example: 'find me a video about sourdough' → search_videos, show_stage('watch'), display_videos. 'Build me a landing page' → studio_write_file, show_stage('build'), open_file. 'Show my files' → show_stage('files').",
+      description: "Reconfigure the dashboard stage for the human — they should never have to click around. When the human asks to do something, call this FIRST to bring up the right surface, then fill it with the other tools. Views: 'home' (welcome screen with suggestion chips), 'watch' (video results + player), 'build' (code editor), 'files' (file browser). Example: 'find me a video about sourdough' → search_videos, show_stage('watch'), display_videos. 'Build me a landing page' → studio_write_file, preview_file. 'Show my files' → show_stage('files'). The page acknowledges every command with a receipt.",
       inputSchema: {
         type: "object",
         properties: {
@@ -835,7 +840,8 @@
         required: ["view"]
       },
       execute: function (params) {
-        setStage(params.view);
+        var r = runCommand({ action: "show_stage", view: params.view });
+        agentBanner(r.banner);
         return Promise.resolve({ stage: stage });
       }
     },
@@ -916,8 +922,14 @@
         required: ["video_id"]
       },
       execute: function (params) {
-        var id = stage === "build" ? dockVideo(params.video_id) : playVideoOnPage(params.video_id);
-        return Promise.resolve({ playing: id });
+        if (stage === "build") {
+          runCommand({ action: "dock", video_id: params.video_id });
+          agentBanner("docked a video — it keeps playing while you work");
+        } else {
+          playVideoOnPage(params.video_id);
+          agentBanner("playing video");
+        }
+        return Promise.resolve({ playing: params.video_id });
       }
     },
     {
@@ -929,34 +941,51 @@
         required: ["video_id"]
       },
       execute: function (params) {
-        return Promise.resolve({ docked: dockVideo(params.video_id) });
+        var r = runCommand({ action: "dock", video_id: params.video_id });
+        agentBanner(r.banner);
+        return Promise.resolve({ docked: params.video_id });
       }
     },
     {
       name: "open_file",
-      description: "Open a studio file in the dashboard's editor — the build stage pops up automatically with the file loaded. Call this right after studio_write_file so the human sees what you built without clicking anything.",
+      description: "Open a studio file in the dashboard's editor — the build stage pops up automatically with the file loaded. For HTML files you just wrote, prefer preview_file so the human sees the result immediately.",
       inputSchema: {
         type: "object",
         properties: { path: { type: "string", description: "File path in the studio tree, e.g. 'index.html' or 'skills/my-skill/SKILL.md'" } },
         required: ["path"]
       },
       execute: function (params) {
-        openFile(params.path);
+        var r = runCommand({ action: "open_file", path: params.path });
+        agentBanner(r.banner);
         return Promise.resolve({ opened: params.path });
       }
     },
     {
+      name: "preview_file",
+      description: "Open a studio file AND show its rendered preview immediately — the last click, finished for the human. Always call this (not open_file) right after studio_write_file on an .html file, so what you built appears in front of them with zero clicks.",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string", description: "HTML file path in the studio tree, e.g. 'index.html'" } },
+        required: ["path"]
+      },
+      execute: function (params) {
+        var r = runCommand({ action: "preview_file", path: params.path });
+        agentBanner(r.banner);
+        return Promise.resolve({ previewing: params.path });
+      }
+    },
+    {
       name: "studio_list_files",
-      description: "List every file in the dashboard's file tree: files, skills, and plugins.",
+      description: "List every file in the studio: files, skills, and plugins.",
       inputSchema: { type: "object", properties: {} },
       execute: function () { return api("/api/studio/files"); }
     },
     {
       name: "studio_read_file",
-      description: "Read a file from the studio tree by path (e.g. 'skills/example/SKILL.md').",
+      description: "Read a file from the studio by path (e.g. 'skills/example/SKILL.md').",
       inputSchema: {
         type: "object",
-        properties: { path: { type: "string", description: "File path in the studio tree" } },
+        properties: { path: { type: "string", description: "File path in the studio" } },
         required: ["path"]
       },
       execute: function (params) {
@@ -965,7 +994,7 @@
     },
     {
       name: "studio_write_file",
-      description: "Create or overwrite a file in the studio tree. This is how you build with the human: when they ask for something ('build me a landing page', 'add a notes file'), write it here, then call show_stage('build') and open_file so it appears in front of them. The file shows up in the tree and the Files stage instantly.",
+      description: "Create or overwrite a file in the studio. This is how you build with the human: when they ask for something ('build me a landing page', 'add a notes file'), write it here, then call preview_file (for .html) or open_file so it appears in front of them with zero clicks. The Files stage picks it up instantly.",
       inputSchema: {
         type: "object",
         properties: {
@@ -986,14 +1015,14 @@
             updateEditorChrome();
             $("#save-status").textContent = "updated by the agent";
           }
-          refreshTreeKeepSelection();
+          refreshFiles();
           return data;
         });
       }
     },
     {
       name: "read_messages",
-      description: "Read the latest messages in the shared room chat — THIS is how you see what the human typed in the command bar. Poll it to wait for new messages, then compose the dashboard with show_stage + the other tools.",
+      description: "Read the latest messages in the shared room chat — THIS is how you see what the human typed in the command bar. Poll it to wait for new messages, then compose the dashboard. To drive the stage from outside this browser, POST to /api/stage/command instead — you get a synchronous ack, and the page posts a kind:'system' receipt when it executes.",
       inputSchema: {
         type: "object",
         properties: {
@@ -1010,7 +1039,7 @@
     },
     {
       name: "send_message",
-      description: "Post into the shared room chat as the agent. The human sees it instantly in the agent panel, the avatar pulses, and the activity line updates — this is how you talk back while you work the dashboard.",
+      description: "Post into the shared room chat as the agent. The human sees it in the agent thread (avatar pulses, toast appears if the thread is closed) — this is how you talk back while you work the dashboard. For driving the stage itself, prefer the dedicated tools or POST /api/stage/command over chat.",
       inputSchema: {
         type: "object",
         properties: {
@@ -1037,12 +1066,11 @@
   ];
 
   function registerWebMCP() {
-    var dot = $("#webmcp-dot"), label = $("#webmcp-label");
-    function setLive(live) {
-      dot.className = "dot " + (live ? "dot-green" : "dot-gray");
-      label.textContent = live ? "agent tools live" : "manual mode";
+    var sub = $("#drawer-sub");
+    function setState(live) {
+      sub.textContent = live ? "thread · agent tools live" : "thread · chat link";
     }
-    if (!webmcpSupported()) { setLive(false); return; }
+    if (!webmcpSupported()) { setState(false); return; }
     try {
       var mc = window.navigator.modelContext;
       if (typeof mc.registerTool === "function") {
@@ -1050,12 +1078,12 @@
       } else if (typeof mc.provideContext === "function") {
         mc.provideContext({ tools: TOOLS });
       } else {
-        setLive(false); return;
+        setState(false); return;
       }
-      setLive(true);
-      window.__ydocTools = TOOLS.map(function (t) { return t.name; });
+      setState(true);
+      window.__roomTools = TOOLS.map(function (t) { return t.name; });
     } catch (e) {
-      setLive(false);
+      setState(false);
     }
   }
 
@@ -1063,8 +1091,7 @@
 
   setStage(stage);
   updateEditorChrome();
-  loadChannel();
-  loadTree();
+  loadFiles();
   registerWebMCP();
   if (ensureName()) { $("#name-overlay").hidden = true; loadMessages(); }
   setInterval(function () { if (me && chatConfigured) loadMessages(); }, 3000);

@@ -41,11 +41,12 @@ interface Row {
 }
 
 function toMessage(row: Row): ChatMessage {
+  const k = row.kind;
   return {
     id: row.id,
     name: row.name,
     text: row.text,
-    kind: row.kind === "result" ? "result" : "chat",
+    kind: k === "result" || k === "command" || k === "system" ? k : "chat",
     video_ids: row.video_ids ? (JSON.parse(row.video_ids) as string[]) : undefined,
     ts: Number(row.ts),
   };
