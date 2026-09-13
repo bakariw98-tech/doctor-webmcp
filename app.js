@@ -496,6 +496,9 @@
       dockVideo(cmd.video_id);
       return { receipt: "docked video ✓", banner: "docked a video — it keeps playing while you work" };
     }
+    if (a === "announce" && typeof cmd.text === "string") {
+      return { receipt: "announced ✓", banner: cmd.text };
+    }
     throw new Error("unknown action: " + a);
   }
 
@@ -1018,6 +1021,48 @@
           refreshFiles();
           return data;
         });
+      }
+    },
+    {
+      name: "studio_delete_file",
+      description: "Delete a file from the studio by path. Use when the human asks to remove something ('delete that draft', 'remove notes/todo.md'). The file tree refreshes instantly.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path in the studio to delete" }
+        },
+        required: ["path"]
+      },
+      execute: function (params) {
+        return api("/api/studio/files?path=" + encodeURIComponent(params.path), {
+          method: "DELETE"
+        }).then(function (data) {
+          if (params.path === currentPath) {
+            currentPath = null;
+            dirty = false;
+            previewOn = false;
+            $("#editor").value = "";
+            $("#save-status").textContent = "";
+            updateEditorChrome();
+          }
+          refreshFiles();
+          return data;
+        });
+      }
+    },
+    {
+      name: "announce",
+      description: "Show a short activity banner on the dashboard stage itself ('writing index.html…', 'pulling up trending videos…') so the human sees your hand moving the room — the stage narrates, not just the chat. Keep it under 8 words.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "Banner text, e.g. 'pulling up trending videos…'" }
+        },
+        required: ["text"]
+      },
+      execute: function (params) {
+        agentBanner(params.text);
+        return Promise.resolve({ announced: params.text });
       }
     },
     {

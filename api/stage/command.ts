@@ -14,10 +14,11 @@
 //   open_file    { path }
 //   preview_file { path }   (opens the file AND shows the HTML preview)
 //   dock         { video_id }
+//   announce     { text }   (stage banner: "Brodie · <text>")
 import { chatConfigured, postMessage } from "../_lib/chat-store.js";
 import type { ApiRequest, ApiResponse } from "../_lib/types.js";
 
-const ACTIONS = ["show_stage", "open_file", "preview_file", "dock"];
+const ACTIONS = ["show_stage", "open_file", "preview_file", "dock", "announce"];
 const STAGES = ["home", "watch", "build", "files"];
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -48,6 +49,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (!video_id)
       return res.status(400).json({ ok: false, error: "A video_id is required." });
     params.video_id = video_id;
+  }
+  if (action === "announce") {
+    const text = typeof body.text === "string" ? body.text.trim().slice(0, 120) : "";
+    if (!text)
+      return res.status(400).json({ ok: false, error: "Banner text is required." });
+    params.text = text;
   }
 
   try {
