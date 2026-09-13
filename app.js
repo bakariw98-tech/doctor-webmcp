@@ -680,6 +680,14 @@
     return { title: res.replace(/ ✓$/, ""), detail: "" };
   }
 
+  function fmtTime(ts) {
+    try {
+      var d = new Date(Number(ts) || 0);
+      if (!d.getTime()) return "";
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch (e) { return ""; }
+  }
+
   function msgHTML(m) {
     if (m.kind === "system") {
       return '<div class="msg sys">' + esc(m.text) + "</div>";
@@ -692,14 +700,16 @@
       return '<div class="msg action">' +
         '<div class="action-title">' + esc(s.title) + "</div>" +
         (s.detail ? '<div class="action-detail">' + esc(s.detail) + "</div>" : "") +
+        (m.ts ? '<div class="action-time">' + esc(fmtTime(m.ts)) + "</div>" : "") +
         "</div>";
     }
     var head;
+    var t = m.ts ? '<span class="msg-time">' + esc(fmtTime(m.ts)) + "</span>" : "";
     if (m.name === me) {
-      head = '<div class="msg-head"><span class="who">' + esc(m.name) + "</span></div>";
+      head = '<div class="msg-head"><span class="who">' + esc(m.name) + "</span>" + t + "</div>";
     } else {
       head = '<div class="msg-head"><span class="msg-avatar">B</span>' +
-        '<span class="who">' + esc(m.name || "Brodie") + "</span></div>";
+        '<span class="who">' + esc(m.name || "Brodie") + "</span>" + t + "</div>";
     }
     var cls = "msg" + (m.name === me ? " mine" : "") + (m.kind === "result" ? " result" : "");
     var html = '<div class="' + cls + '">' + head;
