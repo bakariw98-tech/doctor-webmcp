@@ -379,7 +379,7 @@ body[data-stage="home"] .command-bar input { font-size: 20px; padding: 16px 10px
   border-radius: 999px; padding: 15px 34px; min-height: 54px;
 }
 
-/* Workbench action cards: the visible log of every tool call. */
+/* Workbench action cards: plain words for everything the OS did. */
 .msg.action {
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--line);
@@ -389,25 +389,16 @@ body[data-stage="home"] .command-bar input { font-size: 20px; padding: 16px 10px
   margin: 6px 0;
   max-width: 100%;
 }
-.action-tool {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px;
-  font-weight: 700;
+.action-title {
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--text);
 }
-.action-args {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin-top: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: var(--muted);
-}
-.action-result {
-  margin-top: 4px;
+.action-detail {
+  margin-top: 3px;
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* @ pills: point the bar at room context without leaving the keyboard. */
@@ -1223,8 +1214,7 @@ body:not([data-stage="home"]) .bar-btn { width: 40px; height: 40px; }
   gap: 6px;
 }
 .activity-line {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--line);
@@ -1234,4 +1224,4 @@ body:not([data-stage="home"]) .bar-btn { width: 40px; height: 40px; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.activity-line b { color: var(--text); font-weight: 700; }
+.activity-line b { color: var(--text); font-weight: 600; }

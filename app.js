@@ -661,21 +661,36 @@
     return null;
   }
 
+  /* Action cards speak human. No tool names, no key: value chips —
+   * "Switched to Watch", not "▸ show_stage {view: watch}". */
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  function actionSummary(a) {
+    var tool = a.tool || "", args = a.args || {}, res = a.result || "";
+    if (tool === "show_stage" && args.view) return { title: "Switched to " + cap(args.view), detail: "" };
+    if ((tool === "open_file" || tool === "preview_file") && args.path) {
+      var name = args.path.split("/").pop();
+      return {
+        title: (tool === "preview_file" ? "Previewing " : "Opened ") + name,
+        detail: args.path
+      };
+    }
+    if (tool === "dock") return { title: "Kept the video playing", detail: "it follows you while you work" };
+    if (tool === "announce" && args.text) return { title: args.text, detail: "" };
+    return { title: res.replace(/ ✓$/, ""), detail: "" };
+  }
+
   function msgHTML(m) {
     if (m.kind === "system") {
       return '<div class="msg sys">' + esc(m.text) + "</div>";
     }
     if (m.kind === "action") {
-      // The workbench: a compact card for every tool call the room executed.
+      // The workbench: a plain-words card for everything the OS did.
       var a = {};
       try { a = JSON.parse(m.text); } catch (e) { a = { tool: "action", result: m.text }; }
-      var argBits = Object.keys(a.args || {}).map(function (k) {
-        return "<span>" + esc(k) + ": " + esc(String(a.args[k])).slice(0, 40) + "</span>";
-      }).join("");
+      var s = actionSummary(a);
       return '<div class="msg action">' +
-        '<div class="action-tool">▸ ' + esc(a.tool || "action") + "</div>" +
-        (argBits ? '<div class="action-args">' + argBits + "</div>" : "") +
-        (a.result ? '<div class="action-result">' + esc(a.result) + "</div>" : "") +
+        '<div class="action-title">' + esc(s.title) + "</div>" +
+        (s.detail ? '<div class="action-detail">' + esc(s.detail) + "</div>" : "") +
         "</div>";
     }
     var head;
@@ -1009,7 +1024,7 @@
       return (b.updated_at || 0) - (a.updated_at || 0);
     }).slice(0, 10);
     if (!files.length) { barToast("No room files yet."); return; }
-    sheet.innerHTML = '<div class="sheet-head">Attach a room file</div>' + files.map(function (f) {
+    sheet.innerHTML = '<div class="sheet-head">Choose a file</div>' + files.map(function (f) {
       return '<button type="button" data-path="' + esc(f.path) + '">' + esc(f.path.split("/").pop()) +
         '<span class="sheet-file-sub">' + esc(f.path) + "</span></button>";
     }).join("");
@@ -1025,10 +1040,10 @@
 
   function resetPlusSheet() {
     $("#plus-sheet").innerHTML =
-      '<button type="button" data-act="camera">Take photo</button>' +
-      '<button type="button" data-act="library">Choose from library</button>' +
-      '<button type="button" data-act="roomfile">Attach a room file</button>' +
-      '<button type="button" data-act="video">Attach current video</button>';
+      '<button type="button" data-act="camera">Take a photo</button>' +
+      '<button type="button" data-act="library">Choose a photo</button>' +
+      '<button type="button" data-act="roomfile">Choose a file</button>' +
+      '<button type="button" data-act="video">Use this video</button>';
   }
 
   $("#plus-btn").addEventListener("click", function (ev) {
@@ -1585,11 +1600,12 @@
     var boot = $("#boot");
     if (!boot) return;
     var lines = $("#boot-lines");
-    var systems = ["webmcp link", "voice", "files", "video"];
+    var systems = ["waking up…", "tidying your room…", "warming up my voice…", "ready"];
     systems.forEach(function (s, i) {
       setTimeout(function () {
         var d = document.createElement("div");
-        d.innerHTML = esc(s) + ' <span class="ok">● online</span>';
+        d.textContent = s;
+        if (i === systems.length - 1) d.className = "ok";
         lines.appendChild(d);
       }, 250 + i * 220);
     });
@@ -1608,7 +1624,9 @@
     lines.innerHTML = acts.map(function (m) {
       var a = {};
       try { a = JSON.parse(m.text); } catch (e) { a = { tool: "action", result: m.text }; }
-      return '<div class="activity-line"><b>▸ ' + esc(a.tool || "action") + "</b> " + esc(a.result || "") + "</div>";
+      var s = actionSummary(a);
+      return '<div class="activity-line"><b>' + esc(s.title) + "</b>" +
+        (s.detail ? " · " + esc(s.detail) : "") + "</div>";
     }).join("");
   }
 
