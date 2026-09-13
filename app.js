@@ -588,6 +588,26 @@
       dockVideo(cmd.video_id);
       return { receipt: "docked video ✓", banner: "docked a video — it keeps playing while you work" };
     }
+    if (a === "display_videos" && Array.isArray(cmd.video_ids)) {
+      var vids = cmd.video_ids.filter(function (v) { return typeof v === "string"; }).slice(0, 12);
+      Promise.all(vids.map(function (id) {
+        return api("/api/tools/details?id=" + encodeURIComponent(id))
+          .then(function (d) { return d.video; })
+          .catch(function () { return null; });
+      })).then(function (videos) {
+        var shown = displayVideosOnPage(videos.filter(Boolean), true);
+        postAction("display_videos", cmd, "displayed " + shown + " videos ✓");
+      });
+      return { receipt: "loading " + vids.length + " videos…", banner: "pulling up videos…" };
+    }
+    if (a === "play_video" && typeof cmd.video_id === "string") {
+      if (stage === "build") {
+        runCommand({ action: "dock", video_id: cmd.video_id });
+        return { receipt: "docked video ✓", banner: "docked a video — it keeps playing while you work" };
+      }
+      playVideoOnPage(cmd.video_id);
+      return { receipt: "playing video ✓", banner: "playing video" };
+    }
     if (a === "announce" && typeof cmd.text === "string") {
       return { receipt: "announced ✓", banner: cmd.text };
     }

@@ -249,6 +249,15 @@
           </ol>
         </div>
         <div class="agent-card">
+          <h3>Room tools <span class="muted">— your hands in the room</span></h3>
+          <ol class="agent-orders">
+            <li>Read the room: <code>GET /api/agent/messages?since=&lt;ts&gt;</code> — only what&apos;s new since your last check. That&apos;s how you see what the human typed.</li>
+            <li>Reply: <code>POST /api/agent/messages</code> <code>{"text"}</code> — you speak as Brodie, synchronously. One call, no waiting.</li>
+            <li>Drive the stage: <code>POST /api/stage/command</code> — show_stage, open_file, preview_file, dock, display_videos, play_video, announce.</li>
+            <li>Full catalog: <code>GET /api/agent/tools</code> — every tool, one list.</li>
+          </ol>
+        </div>
+        <div class="agent-card">
           <h3>Queue <span class="muted" id="agent-queue-count"></span></h3>
           <div id="agent-queue" class="agent-list"><span class="muted">watching…</span></div>
         </div>
