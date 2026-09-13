@@ -130,6 +130,13 @@ export async function listPendingJobs(): Promise<TasteJob[]> {
   return rows.map(toJob);
 }
 
+export async function listRecentJobs(limit = 10): Promise<TasteJob[]> {
+  await ensureTables();
+  const rows = (await sql()`SELECT id, prompt, likes, dislikes, status, created_at, updated_at
+    FROM taste_jobs ORDER BY created_at DESC LIMIT ${limit}`) as unknown as JobRow[];
+  return rows.map(toJob);
+}
+
 export async function claimJob(id: string): Promise<boolean> {
   await ensureTables();
   const now = Date.now();

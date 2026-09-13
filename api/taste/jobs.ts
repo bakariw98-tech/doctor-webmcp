@@ -8,6 +8,7 @@ import {
   createJob,
   getJob,
   listPendingJobs,
+  listRecentJobs,
   claimJob,
   listJobImages,
 } from "../_lib/taste-store.js";
@@ -57,6 +58,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (q(req, "status") === "pending") {
         const jobs = await listPendingJobs();
         res.status(200).json({ ok: true, jobs: jobs.map((j) => ({ id: j.id, prompt: j.prompt, likes: j.likes, dislikes: j.dislikes })) });
+        return;
+      }
+      if (q(req, "recent") === "1") {
+        const jobs = await listRecentJobs(10);
+        res.status(200).json({
+          ok: true,
+          jobs: jobs.map((j) => ({ id: j.id, prompt: j.prompt.slice(0, 120), status: j.status, created_at: j.created_at })),
+        });
         return;
       }
       const id = q(req, "id").trim();

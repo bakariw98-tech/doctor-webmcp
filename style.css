@@ -1241,6 +1241,62 @@ body:not([data-stage="home"]) .bar-btn { width: 40px; height: 40px; }
 .presence-dot.on { background: #34d399; box-shadow: 0 0 8px #34d399; }
 @media (max-width: 640px) { .taste-head { flex-direction: column; } }
 
+/* ---- Agent face: the room's second face, built for the agent ---- */
+.taste-agent-login {
+  flex-shrink: 0; align-self: center;
+  background: transparent; border: 1px dashed var(--border); border-radius: 999px;
+  color: var(--muted); font-size: 12px; padding: 7px 12px; cursor: pointer;
+}
+.taste-agent-login:hover { color: var(--text); border-color: var(--text); }
+.taste-agent { margin-top: 4px; }
+.agent-bar {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  padding: 16px; border: 1px solid var(--border); border-radius: 12px;
+  background: #0d1117; margin-bottom: 14px;
+}
+.agent-bar h2 { margin: 0 0 6px; font-size: 18px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.agent-bar p { margin: 0; max-width: 560px; }
+.agent-badge {
+  display: inline-block; font-size: 10px; letter-spacing: 1px; vertical-align: middle;
+  background: #34d399; color: #04120c; border-radius: 4px; padding: 2px 6px; margin-right: 8px;
+}
+.agent-session {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  font-size: 13px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.agent-session button {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-size: 12px; padding: 6px 10px; cursor: pointer;
+}
+.agent-session button:hover { border-color: var(--text); }
+.agent-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; }
+@media (max-width: 900px) { .agent-grid { grid-template-columns: 1fr; } }
+.agent-card {
+  border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+  background: #0d1117;
+}
+.agent-card h3 { margin: 0 0 10px; font-size: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.agent-orders { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.65; color: var(--text); }
+.agent-orders code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+  background: #161b22; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+  word-break: break-all;
+}
+.agent-list { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+.agent-job {
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  background: #11161d; font-size: 13px;
+}
+.agent-job-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.agent-job-top code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--muted); }
+.agent-job-prompt { margin-bottom: 6px; }
+.agent-job-tags .taste-tag { font-size: 11px; }
+.agent-status { font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .5px; }
+.st-pending { color: #fbbf24; }
+.st-working { color: #60a5fa; }
+.st-done { color: #34d399; }
+.st-failed { color: #f87171; }
+
 .taste-layout {
   display: grid;
   grid-template-columns: 1fr 300px;

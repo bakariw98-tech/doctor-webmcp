@@ -176,7 +176,9 @@
         <span class="presence-dot" id="presence-dot"></span>
         <span id="presence-text">checking…</span>
       </div>
+      <button class="taste-agent-login" id="taste-agent-login" type="button" title="The room has a second face — log in as the agent">Brodie log in</button>
     </div>
+    <div id="taste-human">
     <div class="taste-layout">
       <div class="taste-main">
         <form id="taste-form" class="taste-form" autocomplete="off">
@@ -220,6 +222,42 @@
         <button id="taste-reset" class="ghost-btn danger" type="button">Start over</button>
       </aside>
     </div>
+    </div><!-- /#taste-human -->
+    <section class="taste-agent" id="taste-agent" hidden aria-label="Agent workbench">
+      <div class="agent-bar">
+        <div>
+          <h2><span class="agent-badge">AGENT</span> Brodie — agent session</h2>
+          <p class="muted">Logged in as <b>brodie</b>. This is the room's second face — it doesn't look like the human side on purpose. No pretty cards here: just the queue, the contract, and what you owe the room.</p>
+        </div>
+        <div class="agent-session">
+          <span class="presence-dot" id="agent-dot"></span>
+          <span id="agent-presence-text">checking…</span>
+          <button id="agent-checkin" type="button">Check in</button>
+          <button id="agent-logout" class="ghost-btn" type="button">Log out</button>
+        </div>
+      </div>
+      <div class="agent-grid">
+        <div class="agent-card">
+          <h3>Standing orders <span class="muted">— the room speaking to you</span></h3>
+          <ol class="agent-orders">
+            <li>Watch the <b>queue</b>. A <b>pending</b> job is yours — nobody else will take it.</li>
+            <li>Claim it: <code>POST /api/taste/jobs</code> <code>{"action":"claim","job_id"}</code></li>
+            <li>Make <b>two divergent variations yourself</b> — never a third-party image API. Steer by the job's <b>likes</b>, avoid its <b>dislikes</b>.</li>
+            <li>Upload them back: <code>POST /api/taste/results</code> <code>{"job_id","images":[{"slot","contentType","dataBase64","styleLabel","tags"}]}</code> — each image under 1.4MB base64.</li>
+            <li>If you can't finish: <code>POST /api/taste/results</code> <code>{"job_id","action":"failed"}</code> — never leave a job hanging silently.</li>
+            <li>Check in: <code>POST /api/taste/presence</code> every run, jobs or not. That's how the human knows you're here.</li>
+          </ol>
+        </div>
+        <div class="agent-card">
+          <h3>Queue <span class="muted" id="agent-queue-count"></span></h3>
+          <div id="agent-queue" class="agent-list"><span class="muted">watching…</span></div>
+        </div>
+        <div class="agent-card">
+          <h3>Recent work</h3>
+          <div id="agent-recent" class="agent-list"><span class="muted">watching…</span></div>
+        </div>
+      </div>
+    </section>
   </section>
 
   <!-- Mini player: desktop card bottom-right; a slim strip above the

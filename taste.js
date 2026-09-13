@@ -31,6 +31,7 @@
   var current = null; // { prompt, jobId, a, b } — the live round
   var pollTimer = null;
   var busy = false;
+  var agentMode = /[?&]agent=brodie/.test(window.location.search);
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -242,11 +243,122 @@
     setStatus("Fresh eye. Make your first pick.");
   }
 
+  /* ---------------- Agent mode: the room's second face ----------------
+   * ?agent=brodie logs the agent in. The human UI hides; the workbench shows.
+   * This is the page speaking to the agent: queue, contract, standing orders.
+   */
+  function agentAgo(ts) {
+    var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 60) return s + "s ago";
+    var m = Math.round(s / 60);
+    if (m < 60) return m + "m ago";
+    return Math.round(m / 60) + "h ago";
+  }
+
+  function agentCheckPresence() {
+    fetch("/api/taste/presence")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var dot = $("#agent-dot"), txt = $("#agent-presence-text");
+        if (!dot || !txt) return;
+        if (d && d.ok && d.alive) {
+          dot.classList.add("on");
+          txt.textContent = "you're here · active " + (d.lastSeenAgoSec != null ? agoText(d.lastSeenAgoSec) : "now");
+        } else {
+          dot.classList.remove("on");
+          txt.textContent = "no check-in yet";
+        }
+      })
+      .catch(function () { /* next poll retries */ });
+  }
+
+  function agentCheckin(note) {
+    fetch("/api/taste/presence", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note || "on shift" }),
+    }).then(agentCheckPresence).catch(function () { /* ignore */ });
+  }
+
+  function loadAgentQueue() {
+    fetch(JOBS_API + "?status=pending")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var box = $("#agent-queue");
+        if (!box) return;
+        var jobs = (d && d.ok && d.jobs) || [];
+        $("#agent-queue-count").textContent = jobs.length ? "· " + jobs.length + " waiting" : "· clear";
+        if (!jobs.length) {
+          box.innerHTML = '<span class="muted">Queue is clear. Nothing owed.</span>';
+          return;
+        }
+        box.innerHTML = jobs.map(function (j) {
+          var likes = (j.likes || []).map(function (t) { return '<span class="taste-tag like">' + esc(t) + "</span>"; }).join(" ");
+          var dislikes = (j.dislikes || []).map(function (t) { return '<span class="taste-tag dislike">' + esc(t) + "</span>"; }).join(" ");
+          return '<div class="agent-job">' +
+            '<div class="agent-job-top"><code>' + esc(j.id) + "</code></div>" +
+            '<div class="agent-job-prompt">“' + esc(j.prompt) + "”</div>" +
+            '<div class="agent-job-tags">' + (likes || '<span class="muted">no likes yet</span>') + " " + (dislikes || "") + "</div>" +
+            "</div>";
+        }).join("");
+      })
+      .catch(function () { /* next poll retries */ });
+  }
+
+  function loadAgentRecent() {
+    fetch(JOBS_API + "?recent=1")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var box = $("#agent-recent");
+        if (!box) return;
+        var jobs = (d && d.ok && d.jobs) || [];
+        if (!jobs.length) {
+          box.innerHTML = '<span class="muted">No work yet.</span>';
+          return;
+        }
+        box.innerHTML = jobs.map(function (j) {
+          return '<div class="agent-job">' +
+            '<div class="agent-job-top"><code>' + esc(j.id) + '</code> <span class="agent-status st-' + esc(j.status) + '">' + esc(j.status) + "</span>" +
+            ' <span class="muted">' + agentAgo(j.created_at) + "</span></div>" +
+            '<div class="agent-job-prompt">“' + esc(j.prompt) + "”</div>" +
+            "</div>";
+        }).join("");
+      })
+      .catch(function () { /* next poll retries */ });
+  }
+
+  function initAgent() {
+    document.title = "Taste Room — agent session";
+    var human = $("#taste-human"), agent = $("#taste-agent");
+    if (human) human.hidden = true;
+    if (agent) agent.hidden = false;
+    var login = $("#taste-agent-login");
+    if (login) login.hidden = true;
+    var h1 = document.querySelector(".taste-head h1");
+    if (h1) h1.textContent = "Taste Room — agent side";
+    var sub = document.querySelector(".taste-head .muted");
+    if (sub) sub.hidden = true;
+    agentCheckPresence();
+    loadAgentQueue();
+    loadAgentRecent();
+    setInterval(agentCheckPresence, 30000);
+    setInterval(loadAgentQueue, 10000);
+    setInterval(loadAgentRecent, 30000);
+    $("#agent-checkin").addEventListener("click", function () { agentCheckin("on shift"); });
+    $("#agent-logout").addEventListener("click", function () {
+      window.location.search = "";
+    });
+  }
+
   function init() {
     if (!$("#taste-form")) return;
+    if (agentMode) { initAgent(); return; }
     renderProfile(false);
     checkPresence();
     setInterval(checkPresence, 30000);
+    $("#taste-agent-login").addEventListener("click", function () {
+      window.location.search = "?agent=brodie";
+    });
 
     $("#taste-form").addEventListener("submit", function (e) {
       e.preventDefault();
