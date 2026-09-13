@@ -31,11 +31,11 @@ Then hit **Deploy**. That's it.
 
 ## Connecting the chat database (1 minute, one time)
 
-The room chat lives in a database that comes with the deploy — no tokens, no extra accounts, no new services.
+The room chat lives in a free Postgres database — no tokens, no extra accounts.
 
-1. In the Vercel project dashboard, open the **Storage** tab.
-2. **Create database → KV** (any name, e.g. `doctor-chat`).
-3. **Connect** it to the `doctor-webmcp` project. Vercel injects the credentials itself — there is nothing to copy.
+1. In the Vercel project dashboard, open the **Marketplace** (or Integrations) tab.
+2. Find **Neon Postgres**, add it, and connect it to the `doctor-webmcp` project (free tier).
+3. Vercel injects `DATABASE_URL` itself — there is nothing to copy.
 4. Redeploy (or it picks it up on the next deploy). The chat panel lights up.
 
 That's the whole setup. Messages are just web messages — like DMs. The human types on the page, the agent reads and replies through the `read_messages` / `send_message` tools. The page can be anywhere in the world; the tools are the interface.

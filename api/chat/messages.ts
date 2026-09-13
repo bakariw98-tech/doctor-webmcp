@@ -1,4 +1,4 @@
-// Shared chat room (backed by the site's own Vercel KV database).
+// Shared chat room (backed by Neon Postgres via the Vercel Marketplace).
 // GET  /api/chat/messages -> { configured, messages }
 // POST /api/chat/messages { name, text, kind?, video_ids? } -> { message }
 import { chatConfigured, getMessages, postMessage } from "../_lib/chat-store.js";
@@ -16,7 +16,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   if (req.method === "POST") {
-    if (!chatConfigured()) return res.status(503).json({ error: "Chat database is not connected (create a KV store in the Vercel dashboard and connect it to this project)." });
+    if (!chatConfigured()) return res.status(503).json({ error: "Chat database is not connected (add the Neon Postgres integration in the Vercel dashboard and connect it to this project)." });
     const body = (req.body ?? {}) as Record<string, unknown>;
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const text = typeof body.text === "string" ? body.text.trim() : "";

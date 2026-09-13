@@ -16,7 +16,7 @@ api/
     types.ts          shared types + tiny req/res/query helpers
     fixtures.ts       8 demo videos (used when no YouTube key is set)
     youtube.ts        YouTube Data API v3 client (server-side only)
-    chat-store.ts      Vercel KV chat store: the room's messages, no external accounts
+    chat-store.ts      Neon Postgres chat store: the room's messages, free tier via Vercel Marketplace
   tools/
     search.ts         GET /api/tools/search?q=...&max=...&channel=...&order=...
     trending.ts       GET /api/tools/trending?max=...
@@ -53,4 +53,4 @@ API routes are plain dependency-free functions; the fixture path (no credentials
 
 `YOUTUBE_API_KEY` → live YouTube search, else demo fixtures.
 `DOCTOR_CHANNEL_ID` (optional) → a default channel for the "his videos" shortcut. The app searches all of YouTube with or without it.
-Connect a **KV** database in the Vercel dashboard (Storage tab) → shared room chat, else a setup hint. No tokens to copy — Vercel injects the credentials.
+Connect **Neon Postgres** from the Vercel Marketplace (free tier) → shared room chat, else a setup hint. Vercel injects `DATABASE_URL` automatically.
