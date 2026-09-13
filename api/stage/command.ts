@@ -6,8 +6,9 @@
 // validated, stored as an invisible kind:"command" message, and the agent
 // gets a synchronous ack. The page picks the command up on its next poll,
 // executes it through the same runCommand() the WebMCP tools use, and posts
-// a kind:"system" receipt ("stage → build ✓") the agent reads on its next
-// read_messages — so the loop is closed: ack on send, receipt on execute.
+// a kind:"action" receipt card ("▸ show_stage · view: watch → switched to watch ✓")
+// the agent reads on its next read_messages — so the loop is closed:
+// ack on send, receipt card on execute.
 //
 // Actions:
 //   show_stage   { view: home|watch|build|files }

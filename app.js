@@ -138,7 +138,7 @@
     var line = "online — talk in the command bar";
     for (var i = messages.length - 1; i >= 0; i--) {
       var m = messages[i];
-      if (isHiddenCommand(m) || m.kind === "system") continue;
+      if (isHiddenCommand(m) || m.kind === "system" || m.kind === "action") continue;
       if (!m.name || m.name === me) continue;
       line = summarizeAgentMessage(m);
       break;
@@ -531,16 +531,24 @@
   /* ---------------- the closed command loop ----------------
    * ONE executor for every path: WebMCP tools, the /api/stage/command
    * inbox, and legacy kind:"command" chat messages. After executing, the
-   * page posts a kind:"system" receipt so the agent sees the ack. */
+   * page posts a kind:"action" receipt card so the agent sees the ack. */
 
   var executedCommands = {};
 
-  function postReceipt(text) {
+  function postAction(tool, rawCmd, result) {
+    var args = {};
+    Object.keys(rawCmd || {}).forEach(function (k) {
+      if (k !== "action" && typeof rawCmd[k] === "string" && rawCmd[k].length <= 200) args[k] = rawCmd[k];
+    });
     api("/api/chat/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "room", text: text, kind: "system" })
-    }).catch(function () { /* receipts are best-effort */ });
+      body: JSON.stringify({
+        name: "room",
+        kind: "action",
+        text: JSON.stringify({ tool: tool, args: args, result: String(result || "").slice(0, 200) })
+      })
+    }).catch(function () { /* action cards are best-effort */ });
   }
 
   function runCommand(cmd) {
@@ -577,9 +585,9 @@
       var r = runCommand(cmd);
       clearBanner();
       agentBanner(r.banner);
-      postReceipt(r.receipt);
+      postAction(cmd.action, cmd, r.receipt);
     } catch (e) {
-      postReceipt("command failed: " + e.message);
+      postAction(cmd.action, cmd, "failed: " + e.message);
     }
   }
 
@@ -629,7 +637,7 @@
   function newestAgentMessage(messages) {
     for (var i = messages.length - 1; i >= 0; i--) {
       var m = messages[i];
-      if (isHiddenCommand(m) || m.kind === "system") continue;
+      if (isHiddenCommand(m) || m.kind === "system" || m.kind === "action") continue;
       if (m.name && m.name !== me) return m;
     }
     return null;
@@ -638,6 +646,19 @@
   function msgHTML(m) {
     if (m.kind === "system") {
       return '<div class="msg sys">' + esc(m.text) + "</div>";
+    }
+    if (m.kind === "action") {
+      // The workbench: a compact card for every tool call the room executed.
+      var a = {};
+      try { a = JSON.parse(m.text); } catch (e) { a = { tool: "action", result: m.text }; }
+      var argBits = Object.keys(a.args || {}).map(function (k) {
+        return "<span>" + esc(k) + ": " + esc(String(a.args[k])).slice(0, 40) + "</span>";
+      }).join("");
+      return '<div class="msg action">' +
+        '<div class="action-tool">▸ ' + esc(a.tool || "action") + "</div>" +
+        (argBits ? '<div class="action-args">' + argBits + "</div>" : "") +
+        (a.result ? '<div class="action-result">' + esc(a.result) + "</div>" : "") +
+        "</div>";
     }
     var head;
     if (m.name === me) {
@@ -1100,12 +1121,94 @@
     try { r.start(); } catch (e) { ov.hidden = true; barToast("Couldn't start voice mode."); }
   });
 
+  /* ---------------- @ pills: point the bar at room context ----------------
+   * Type @ in the command box to pull in a room file, the playing video,
+   * or a target stage — the CLI for the UI. Tokens resolve to context
+   * markers at submit time, same as + attachments. */
+
+  var atPicker = null, atRange = null;
+
+  function atTokenAtCursor(input) {
+    var pos = input.selectionStart || 0;
+    var before = input.value.slice(0, pos);
+    var m = before.match(/@([\w\-./:]*)$/);
+    if (!m) return null;
+    return { query: m[1].toLowerCase(), start: pos - m[0].length, end: pos };
+  }
+
+  function atCandidates(query) {
+    var files = (typeof treeFiles !== "undefined" ? treeFiles : [])
+      .filter(function (f) { return f.path.toLowerCase().indexOf(query) !== -1; })
+      .slice(0, 6)
+      .map(function (f) {
+        return { label: f.path.split("/").pop(), sub: f.path, token: "@file:" + f.path };
+      });
+    var out = [];
+    if ("this video".indexOf(query) !== -1 || "video".indexOf(query) !== -1 || !query) {
+      var vid = currentVideoId();
+      if (vid) out.push({ label: "This video", sub: vid, token: "@video:" + vid, head: "Video" });
+    }
+    ["home", "watch", "build", "files"].forEach(function (s) {
+      if (!query || s.indexOf(query) !== -1) {
+        out.push({ label: "Stage: " + s, sub: "direct the work here", token: "@stage:" + s, head: "Stage" });
+      }
+    });
+    if (files.length) out = [{ head: "Files" }].concat(files, out);
+    return out.slice(0, 12);
+  }
+
+  function renderAtPicker() {
+    var input = $("#command-input");
+    var tk = atTokenAtCursor(input);
+    atPicker = $("#at-picker");
+    if (!tk) { atPicker.hidden = true; atRange = null; return; }
+    var items = atCandidates(tk.query);
+    if (!items.length) { atPicker.hidden = true; atRange = null; return; }
+    atRange = tk;
+    var html = "", lastHead = null;
+    items.forEach(function (it) {
+      if (it.head && it.head !== lastHead) { html += '<div class="sheet-head">' + esc(it.head) + "</div>"; lastHead = it.head; }
+      if (!it.token) return;
+      html += '<button type="button" data-token="' + esc(it.token) + '">' + esc(it.label) +
+        '<span class="sheet-file-sub">' + esc(it.sub || "") + "</span></button>";
+    });
+    atPicker.innerHTML = html;
+    atPicker.hidden = false;
+  }
+
+  $("#command-input").addEventListener("input", renderAtPicker);
+  $("#command-input").addEventListener("click", renderAtPicker);
+  $("#command-input").addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && atPicker && !atPicker.hidden) { atPicker.hidden = true; atRange = null; }
+  });
+  $("#at-picker").addEventListener("mousedown", function (ev) {
+    var b = ev.target.closest("button[data-token]");
+    if (!b || !atRange) return;
+    ev.preventDefault();
+    var input = $("#command-input");
+    var v = input.value;
+    var token = b.getAttribute("data-token");
+    input.value = v.slice(0, atRange.start) + token + " " + v.slice(atRange.end);
+    $("#at-picker").hidden = true; atRange = null;
+    input.focus();
+  });
+  document.addEventListener("click", function (ev) {
+    var p = $("#at-picker");
+    if (p && !p.hidden && !ev.target.closest("#at-picker") && !ev.target.closest("#command-input")) p.hidden = true;
+  });
+
+  function resolveAtPills(v) {
+    return v.replace(/@file:(\S+)/g, "[file: $1]")
+      .replace(/@video:(\S+)/g, "[video: $1]")
+      .replace(/@stage:(\w+)/g, "[stage: $1]");
+  }
+
   /* Submit: photos get persisted to the room first, then the whole
      command — attachments as context markers — goes to the agent. */
   $("#command-form").addEventListener("submit", function (ev) {
     ev.preventDefault();
     var input = $("#command-input");
-    var v = input.value;
+    var v = resolveAtPills(input.value);
     var atts = attachments.slice();
     attachments = [];
     renderAttachTray();
@@ -1392,7 +1495,7 @@
     },
     {
       name: "read_messages",
-      description: "Read the latest messages in the shared room chat — THIS is how you see what the human typed in the command bar. Poll it to wait for new messages, then compose the dashboard. To drive the stage from outside this browser, POST to /api/stage/command instead — you get a synchronous ack, and the page posts a kind:'system' receipt when it executes.",
+      description: "Read the latest messages in the shared room chat — THIS is how you see what the human typed in the command bar. Poll it to wait for new messages, then compose the dashboard. To drive the stage from outside this browser, POST to /api/stage/command instead — you get a synchronous ack, and the page posts a kind:'action' receipt card when it executes.",
       inputSchema: {
         type: "object",
         properties: {

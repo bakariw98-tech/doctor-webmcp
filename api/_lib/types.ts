@@ -35,7 +35,7 @@ export interface ChannelInfo {
   demo: boolean; // true when no YouTube API key is configured
 }
 
-export type ChatKind = "chat" | "result" | "command" | "system";
+export type ChatKind = "chat" | "result" | "command" | "system" | "action";
 
 export interface ChatMessage {
   id: string;
