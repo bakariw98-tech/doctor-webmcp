@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>YouTube Doctor — watch, build, together</title>
-<meta name="description" content="One dashboard: watch YouTube with an AI agent, vibe-code in the studio, and talk to the agent the whole time.">
+<title>YouTube Doctor — one dashboard, driven by Brodie</title>
+<meta name="description" content="One dashboard: tell Brodie what to do and the UI builds itself — watch YouTube, vibe-code, browse files, all in one place.">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -42,11 +42,6 @@
     </div>
   </div>
 
-  <nav class="mode-switch" aria-label="Dashboard mode">
-    <button class="mode-btn active" type="button" data-mode="watch" aria-pressed="true">Watch</button>
-    <button class="mode-btn" type="button" data-mode="build" aria-pressed="false">Build</button>
-  </nav>
-
   <div class="status">
     <span id="demo-badge" class="badge badge-demo" hidden>demo data</span>
     <span class="webmcp-pill" title="Whether this browser exposes the page's tools to AI agents">
@@ -57,7 +52,23 @@
 </header>
 
 <div class="dash">
-  <!-- Left rail: the file tree, always there -->
+  <!-- Icon sidebar: manual shortcuts only. The agent drives; these are the backup. -->
+  <nav class="icon-rail" aria-label="Dashboard sections">
+    <button type="button" class="icon-btn" data-stage="home" title="Home" aria-pressed="false">
+      <span class="icon-glyph">⌂</span><span class="icon-label">Home</span>
+    </button>
+    <button type="button" class="icon-btn" data-stage="watch" title="Watch" aria-pressed="false">
+      <span class="icon-glyph">▶</span><span class="icon-label">Watch</span>
+    </button>
+    <button type="button" class="icon-btn" data-stage="build" title="Build" aria-pressed="false">
+      <span class="icon-glyph">◈</span><span class="icon-label">Build</span>
+    </button>
+    <button type="button" class="icon-btn" data-stage="files" title="Files" aria-pressed="false">
+      <span class="icon-glyph">▤</span><span class="icon-label">Files</span>
+    </button>
+  </nav>
+
+  <!-- Explorer: the file tree, always there -->
   <aside class="rail studio-panel tree-rail" aria-label="File tree">
     <div class="panel-head">
       <span class="panel-label">Explorer</span>
@@ -67,19 +78,31 @@
     <div id="tree-status" class="panel-foot muted"></div>
   </aside>
 
-  <!-- Center stage: one surface, two modes. Switching never reloads. -->
+  <!-- The generative stage: the agent composes this. Command bar is the primary interface. -->
   <main class="stage">
-    <!-- WATCH MODE -->
-    <section id="watch-stage" class="stage-pane" aria-label="Watch">
-      <div class="hero">
-        <h1>What do you want to watch?</h1>
-        <p class="hero-sub">Type it below — Brodie is on this page too, and will find it for you.</p>
-        <form id="ask-form" class="ask-row" autocomplete="off">
-          <input id="ask-input" type="text" placeholder="e.g. find me a video about gut health…" maxlength="300" aria-label="What do you want to watch?">
-          <button type="submit">Ask</button>
-        </form>
-      </div>
+    <div class="command-bar-wrap">
+      <form id="command-form" class="command-bar" autocomplete="off">
+        <span class="cmd-glyph" aria-hidden="true">✦</span>
+        <input id="command-input" type="text" placeholder="Tell Brodie what to do…" maxlength="500" aria-label="Tell Brodie what to do">
+        <button type="submit">Go</button>
+      </form>
+      <p class="cmd-hint muted">Brodie drives the dashboard — the right surface appears on its own. The icons on the left are just shortcuts.</p>
+    </div>
 
+    <!-- HOME -->
+    <section id="home-stage" class="stage-pane home-pane" aria-label="Home">
+      <h1>What do you want to do?</h1>
+      <p class="hero-sub">Say it in the bar above — watch something, build something, dock a video. The dashboard builds itself around your request.</p>
+      <div class="chips">
+        <button type="button" class="chip" data-cmd="Find me lofi beats to focus to">Find me lofi beats to focus to</button>
+        <button type="button" class="chip" data-cmd="Show what's trending on YouTube">Show what's trending on YouTube</button>
+        <button type="button" class="chip" data-cmd="Build me a landing page">Build me a landing page</button>
+        <button type="button" class="chip" data-cmd="Show my files">Show my files</button>
+      </div>
+    </section>
+
+    <!-- WATCH -->
+    <section id="watch-stage" class="stage-pane" aria-label="Watch" hidden>
       <section id="player-section" class="player-section" hidden>
         <div class="player-head">
           <div id="now-playing" class="now-playing"></div>
@@ -96,12 +119,12 @@
           <button id="trending-btn" class="ghost-btn" type="button">Show what's trending</button>
         </div>
         <div id="results" class="cards" aria-live="polite">
-          <div class="empty">Nothing here yet — ask above, or tap “Show what's trending”.</div>
+          <div class="empty">Nothing here yet — tell Brodie what to find, or tap “Show what's trending”.</div>
         </div>
       </section>
     </section>
 
-    <!-- BUILD MODE -->
+    <!-- BUILD -->
     <section id="build-stage" class="stage-pane build-pane" aria-label="Build" hidden>
       <div class="build-toolbar">
         <div class="dock-search-wrap">
@@ -126,11 +149,21 @@
       </div>
       <div id="editor-empty" class="editor-empty">
         <p class="editor-empty-title">Pick a file from the tree</p>
-        <p class="muted">or press <b>+ New</b> to start one. Brodie can write files here too — just ask in the chat.</p>
+        <p class="muted">or press <b>+ New</b> to start one. Or just tell Brodie what to build — the file appears here on its own.</p>
       </div>
       <textarea id="editor" class="editor" hidden spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="File editor"></textarea>
       <iframe id="preview" class="preview" hidden sandbox="allow-scripts" title="HTML preview"></iframe>
       <div id="save-status" class="save-status muted"></div>
+    </section>
+
+    <!-- FILES -->
+    <section id="files-stage" class="stage-pane files-pane" aria-label="Files" hidden>
+      <div class="section-head">
+        <h2>Files</h2>
+        <button id="files-new-btn" class="ghost-btn" type="button">+ New</button>
+      </div>
+      <input id="files-filter" class="filter-input" type="text" placeholder="Filter files…" maxlength="100" aria-label="Filter files">
+      <div id="files-browser" class="files-browser" aria-live="polite"></div>
     </section>
   </main>
 
@@ -156,7 +189,7 @@
   </aside>
 </div>
 
-<!-- Mini player: docked, keeps playing across modes -->
+<!-- Mini player: docked, keeps playing across stages -->
 <div id="dock" class="dock" hidden>
   <div class="dock-head">
     <span id="dock-title" class="dock-title">Mini player</span>
@@ -168,7 +201,7 @@
 </div>
 
 <footer class="footer">
-  <span>Tools on this page: <code>search_videos</code> · <code>list_trending_videos</code> · <code>get_video_details</code> · <code>display_videos</code> · <code>play_video</code> · <code>dock_video</code> · <code>studio_list_files</code> · <code>studio_read_file</code> · <code>studio_write_file</code> · <code>read_messages</code> · <code>send_message</code></span>
+  <span>Tools on this page: <code>show_stage</code> · <code>search_videos</code> · <code>list_trending_videos</code> · <code>get_video_details</code> · <code>display_videos</code> · <code>play_video</code> · <code>dock_video</code> · <code>open_file</code> · <code>studio_list_files</code> · <code>studio_read_file</code> · <code>studio_write_file</code> · <code>read_messages</code> · <code>send_message</code></span>
 </footer>
 
 <script src="/app.js"></script>

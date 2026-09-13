@@ -1,14 +1,14 @@
-/* YouTube Doctor — one dashboard.
- * Watch mode: ask bar, results, player. Build mode: file tree-backed editor
- * with preview, plus a docked mini player that keeps playing while you work.
- * The agent (Brodie) lives behind the whole dashboard: presence + activity in
- * the header, room chat in the right panel, and a WebMCP tool surface so an
- * in-browser agent can search, render, play, dock, and write files — no clicking.
+/* YouTube Doctor — one dashboard, driven by the agent.
+ * The human tells Brodie what to do in the command bar; the dashboard builds
+ * itself around the request. Left icons are manual shortcuts only.
+ * Stages: home | watch | build | files. The agent composes the stage with the
+ * show_stage tool, then fills it with the other tools — no clicking needed.
  */
 (function () {
   "use strict";
 
   var $ = function (s) { return document.querySelector(s); };
+  var bootTs = Date.now();
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -52,26 +52,38 @@
     loadMessages();
   });
 
-  /* ---------------- mode switch (Watch | Build), no reload ---------------- */
+  /* ---------------- stages: home | watch | build | files ----------------
+   * The agent composes the stage with show_stage. The icon rail is the
+   * manual fallback — same function, for when the human wants to click. */
 
-  var mode = "watch";
-  try { mode = localStorage.getItem("ydoc_mode") === "build" ? "build" : "watch"; } catch (e) { /* ignore */ }
+  var STAGES = ["home", "watch", "build", "files"];
+  var stage = "home";
+  try {
+    var saved = localStorage.getItem("ydoc_stage");
+    if (STAGES.indexOf(saved) !== -1) stage = saved;
+  } catch (e) { /* ignore */ }
 
-  function setMode(next) {
-    mode = next === "build" ? "build" : "watch";
-    try { localStorage.setItem("ydoc_mode", mode); } catch (e) { /* ignore */ }
-    $("#watch-stage").hidden = mode !== "watch";
-    $("#build-stage").hidden = mode !== "build";
-    Array.prototype.forEach.call(document.querySelectorAll(".mode-btn"), function (b) {
-      var on = b.getAttribute("data-mode") === mode;
+  function setStage(next) {
+    if (STAGES.indexOf(next) === -1) next = "home";
+    stage = next;
+    try { localStorage.setItem("ydoc_stage", stage); } catch (e) { /* ignore */ }
+    var panes = {
+      home: $("#home-stage"),
+      watch: $("#watch-stage"),
+      build: $("#build-stage"),
+      files: $("#files-stage")
+    };
+    STAGES.forEach(function (s) { panes[s].hidden = s !== stage; });
+    Array.prototype.forEach.call(document.querySelectorAll(".icon-btn"), function (b) {
+      var on = b.getAttribute("data-stage") === stage;
       b.classList.toggle("active", on);
       b.setAttribute("aria-pressed", on ? "true" : "false");
     });
-    if (mode === "build" && !treeLoaded) loadTree();
+    if (stage === "files") renderFilesStage();
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll(".mode-btn"), function (b) {
-    b.addEventListener("click", function () { setMode(b.getAttribute("data-mode")); });
+  Array.prototype.forEach.call(document.querySelectorAll(".icon-btn"), function (b) {
+    b.addEventListener("click", function () { setStage(b.getAttribute("data-stage")); });
   });
 
   /* ---------------- agent presence: the dashboard feels alive ---------------- */
@@ -156,9 +168,10 @@
     });
   }
 
-  /** Render video cards into the results area. Called by the display_videos tool. */
-  function displayVideosOnPage(videos) {
-    if (mode !== "watch") setMode("watch");
+  /** Render video cards into the results area. switchStage=false keeps the
+   *  current stage (used when mirroring old messages on page load). */
+  function displayVideosOnPage(videos, switchStage) {
+    if (switchStage !== false && stage !== "watch") setStage("watch");
     var box = $("#results");
     if (!videos || videos.length === 0) {
       box.innerHTML = '<div class="empty">No videos found — try a different search.</div>';
@@ -173,7 +186,7 @@
   /** Load a video into the embedded player. Called by the play_video tool. */
   function playVideoOnPage(videoId) {
     if (!videoId) return null;
-    if (mode !== "watch") setMode("watch");
+    if (stage !== "watch") setStage("watch");
     var frame = $("#player");
     frame.src = "https://www.youtube.com/embed/" + encodeURIComponent(videoId) + "?autoplay=1&rel=0";
     $("#player-section").hidden = false;
@@ -192,17 +205,20 @@
     $("#player-section").hidden = true;
   });
 
-  $("#trending-btn").addEventListener("click", function () {
+  function runTrending() {
     lastLocalSearchTs = Date.now();
     setActivity("finding what's trending…");
+    setStage("watch");
     api("/api/tools/trending?max=8").then(function (data) {
-      displayVideosOnPage(data.videos);
+      displayVideosOnPage(data.videos, false);
       clearActivityOverride();
     }).catch(function (err) {
       clearActivityOverride();
       $("#results").innerHTML = '<div class="empty">Could not load videos: ' + esc(err.message) + "</div>";
     });
-  });
+  }
+
+  $("#trending-btn").addEventListener("click", runTrending);
 
   /* ---------------- docked mini player: video keeps playing while you build ---------------- */
 
@@ -398,6 +414,7 @@
       treeFiles = data.files || [];
       renderTree();
       status.textContent = treeFiles.length + (treeFiles.length === 1 ? " file" : " files");
+      if (stage === "files") renderFilesStage();
     }).catch(function (err) {
       status.textContent = "couldn't load files: " + err.message;
       $("#tree").innerHTML = '<div class="empty">Files unavailable — is the database connected?</div>';
@@ -409,8 +426,47 @@
       treeFiles = data.files || [];
       renderTree();
       $("#tree-status").textContent = treeFiles.length + (treeFiles.length === 1 ? " file" : " files");
+      if (stage === "files") renderFilesStage();
     }).catch(function () { /* keep old tree on transient failure */ });
   }
+
+  /* ---------------- files stage: the studio as a browser ---------------- */
+
+  function renderFilesStage() {
+    var box = $("#files-browser");
+    if (!box) return;
+    var q = ($("#files-filter").value || "").toLowerCase();
+    var html = "";
+    ROOTS.forEach(function (r) {
+      var list = treeFiles.filter(function (f) {
+        return relFor(r, f.path) && (!q || f.path.toLowerCase().indexOf(q) !== -1);
+      });
+      if (!list.length) return;
+      html += '<div class="files-group"><div class="files-group-head"><span class="tree-root-icon">' +
+        esc(r.icon) + '</span><span class="files-group-name">' + esc(r.name) + '</span>' +
+        '<span class="files-count">' + list.length + "</span></div>";
+      html += list.map(function (f) {
+        var name = f.path.split("/").pop();
+        return '<div class="file-row" data-path="' + esc(f.path) + '" role="button" tabindex="0">' +
+          '<span class="tree-file-icon">' + esc(fileIcon(f.path)) + "</span>" +
+          '<span class="file-row-main"><span class="file-row-name">' + esc(name) + "</span>" +
+          '<span class="file-row-path muted">' + esc(f.path) + "</span></span>" +
+          (f.updated_at ? '<span class="file-row-date muted">' + esc(fmtDate(f.updated_at)) + "</span>" : "") +
+          "</div>";
+      }).join("");
+      html += "</div>";
+    });
+    box.innerHTML = html || '<div class="empty">No files found.</div>';
+    Array.prototype.forEach.call(box.querySelectorAll("[data-path]"), function (el) {
+      function go() { openFile(el.getAttribute("data-path")); }
+      el.addEventListener("click", go);
+      el.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); go(); }
+      });
+    });
+  }
+
+  $("#files-filter").addEventListener("input", renderFilesStage);
 
   /* ---------------- editor ---------------- */
 
@@ -440,7 +496,7 @@
   }
 
   function openFile(path) {
-    if (mode !== "build") setMode("build");
+    if (stage !== "build") setStage("build");
     selectedPath = path;
     currentPath = path;
     dirty = false;
@@ -510,6 +566,14 @@
       });
   }
 
+  function promptNewFile() {
+    var p = window.prompt("Path for the new file (e.g. notes/todo.md, skills/my-skill/SKILL.md):");
+    if (!p) return;
+    p = p.trim().replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\/+/, "");
+    if (!p || p.indexOf("..") !== -1) { window.alert("Invalid path."); return; }
+    openFile(p);
+  }
+
   $("#editor").addEventListener("input", markDirty);
   $("#save-file-btn").addEventListener("click", saveFile);
   $("#delete-file-btn").addEventListener("click", deleteCurrentFile);
@@ -520,17 +584,12 @@
   });
   document.addEventListener("keydown", function (ev) {
     if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "s") {
-      if (currentPath && mode === "build") { ev.preventDefault(); saveFile(); }
+      if (currentPath && stage === "build") { ev.preventDefault(); saveFile(); }
     }
   });
 
-  $("#new-file-btn").addEventListener("click", function () {
-    var p = window.prompt("Path for the new file (e.g. notes/todo.md, skills/my-skill/SKILL.md):");
-    if (!p) return;
-    p = p.trim().replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\/+/, "");
-    if (!p || p.indexOf("..") !== -1) { window.alert("Invalid path."); return; }
-    openFile(p);
-  });
+  $("#new-file-btn").addEventListener("click", promptNewFile);
+  $("#files-new-btn").addEventListener("click", promptNewFile);
 
   /* ---------------- shared room chat + agent aliveness ---------------- */
 
@@ -542,7 +601,8 @@
   var paintTimer = null;
 
   /** Mirror an agent's result message into the results area as full video
-   *  cards, so shared videos feel like generative UI — not just chat. */
+   *  cards, so shared videos feel like generative UI — not just chat.
+   *  Only yanks the stage if the message arrived while you were here. */
   function mirrorResultToResults(msg) {
     if (!msg || msg.id === lastMirroredResultId) return;
     if (!(msg.ts > lastLocalSearchTs)) return;
@@ -554,7 +614,7 @@
         .catch(function () { return null; });
     })).then(function (videos) {
       videos = videos.filter(function (v) { return !!v; });
-      if (videos.length) displayVideosOnPage(videos);
+      if (videos.length) displayVideosOnPage(videos, msg.ts > bootTs);
     });
   }
 
@@ -604,14 +664,14 @@
       if (m.kind === "result" && m.video_ids && m.video_ids.length) {
         html += '<div class="mini-cards">' + m.video_ids.map(function (id) {
           return '<article class="card mini" data-video-id="' + esc(id) + '" tabindex="0" role="button" aria-label="Play video">' +
-            '<div class="card-body"><p class="card-title">▶ ' + (mode === "build" ? "Dock" : "Watch") + " video</p>" +
+            '<div class="card-body"><p class="card-title">▶ ' + (stage === "build" ? "Dock" : "Watch") + " video</p>" +
             '<div class="card-meta"><span>' + esc(id) + "</span></div></div></article>";
         }).join("") + "</div>";
       }
       return html + "</div>";
     }).join("");
-    // Chat video cards follow the current mode: Watch plays big, Build docks.
-    wireCards(box, mode === "build" ? dockVideo : playVideoOnPage);
+    // Chat video cards follow the current stage: Build docks, everything else plays big.
+    wireCards(box, stage === "build" ? dockVideo : playVideoOnPage);
     box.scrollTop = box.scrollHeight;
     updatePresence(messages);
     // Mirror the newest agent result into the results area as full cards.
@@ -657,30 +717,76 @@
     postChat(v);
   });
 
-  // The big prompt searches YouTube directly and shows the videos as cards,
-  // so the page works with no agent in the loop. It also posts into the room
-  // so the agent (when present) sees the request.
-  $("#ask-form").addEventListener("submit", function (ev) {
-    ev.preventDefault();
-    var input = $("#ask-input");
-    var v = input.value.trim();
-    if (!v) return;
-    input.value = "";
-    postChat(v);
+  /* ---------------- command bar: the primary interface ----------------
+   * Every command goes into the room (the agent sees it). For video
+   * requests the dashboard also searches directly, so it works with no
+   * agent in the loop — and the stage composes itself. */
+
+  function stripCommandVerbs(v) {
+    var q = v
+      .replace(/^(please\s+)?(find|show|get|search|look\s*up|play|watch|dock)(\s+me)?(\s+(a|an|the|some))?\s+/i, "")
+      .replace(/^(for|about|on)\s+/i, "")
+      .replace(/\s+(video|videos)\s*$/i, "");
+    return q.trim() || v;
+  }
+
+  var VIDEO_WORDS = /\b(video|videos|watch|youtube|lofi|song|songs|music|clip|trailer|tutorial|beats|podcast)\b/i;
+  var FILE_WORDS = /\b(files?|skills?|plugins?|file tree|explorer)\b/i;
+
+  function runSearch(q) {
     lastLocalSearchTs = Date.now();
     setActivity("searching YouTube…");
+    setStage("watch");
     var box = $("#results");
     box.innerHTML = '<div class="empty">Searching…</div>';
-    api("/api/tools/search?q=" + encodeURIComponent(v) + "&max=8").then(function (data) {
-      displayVideosOnPage(data.videos);
+    api("/api/tools/search?q=" + encodeURIComponent(q) + "&max=8").then(function (data) {
+      displayVideosOnPage(data.videos, false);
       clearActivityOverride();
     }).catch(function (err) {
       clearActivityOverride();
       box.innerHTML = '<div class="empty">Could not search: ' + esc(err.message) + "</div>";
     });
+  }
+
+  function handleCommand(text) {
+    var v = (text || "").trim();
+    if (!v) return;
+    postChat(v);
+    var low = v.toLowerCase();
+    if (/\btrend/.test(low)) { runTrending(); return; }
+    if (/\bdock\b/.test(low) && VIDEO_WORDS.test(low)) {
+      // "dock some lofi while I work": park the top result, stay put.
+      var q = stripCommandVerbs(v);
+      lastLocalSearchTs = Date.now();
+      setActivity("docking a video…");
+      api("/api/tools/search?q=" + encodeURIComponent(q) + "&max=1").then(function (data) {
+        var vids = data.videos || [];
+        if (vids.length) dockVideo(vids[0].video_id);
+        clearActivityOverride();
+      }).catch(function () { clearActivityOverride(); });
+      return;
+    }
+    if (FILE_WORDS.test(low) && !VIDEO_WORDS.test(low)) { setStage("files"); return; }
+    if (VIDEO_WORDS.test(low)) { runSearch(stripCommandVerbs(v)); return; }
+    // Otherwise the message just sits in the room: if the agent is around,
+    // it composes the dashboard with show_stage + the other tools.
+  }
+
+  $("#command-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var input = $("#command-input");
+    handleCommand(input.value);
+    input.value = "";
   });
 
-  /* ---------------- WebMCP tool surface: video + studio + chat ---------------- */
+  Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (c) {
+    c.addEventListener("click", function () { handleCommand(c.getAttribute("data-cmd")); });
+  });
+
+  /* ---------------- WebMCP tool surface ----------------
+   * These descriptions teach the agent the generative-UI pattern:
+   * the human should never have to click — the agent calls show_stage
+   * to compose the dashboard, then fills it with the other tools. */
 
   function webmcpSupported() {
     try {
@@ -690,8 +796,23 @@
 
   var TOOLS = [
     {
+      name: "show_stage",
+      description: "Reconfigure the dashboard stage for the human — they should never have to click around. When the human asks to do something, call this FIRST to bring up the right surface, then fill it with the other tools. Views: 'home' (welcome screen with suggestion chips), 'watch' (video results + player), 'build' (code editor), 'files' (file browser). Example: 'find me a video about sourdough' → search_videos, show_stage('watch'), display_videos. 'Build me a landing page' → studio_write_file, show_stage('build'), open_file. 'Show my files' → show_stage('files').",
+      inputSchema: {
+        type: "object",
+        properties: {
+          view: { type: "string", description: "Which stage to show: home, watch, build, or files", enum: ["home", "watch", "build", "files"] }
+        },
+        required: ["view"]
+      },
+      execute: function (params) {
+        setStage(params.view);
+        return Promise.resolve({ stage: stage });
+      }
+    },
+    {
       name: "search_videos",
-      description: "Search all of YouTube by keyword. Pass channel_id to narrow the search to one channel (e.g. 'his videos'). Omit query when channel_id is given to get that channel's latest uploads.",
+      description: "Search all of YouTube by keyword. When the human asks to find or watch something ('find me videos about X', 'show me lofi beats'), search here, then call show_stage('watch') and display_videos so the results pop up on the dashboard — no clicking needed. Pass channel_id to narrow the search to one channel (e.g. 'his videos'). Omit query when channel_id is given to get that channel's latest uploads.",
       inputSchema: {
         type: "object",
         properties: {
@@ -711,7 +832,7 @@
     },
     {
       name: "list_trending_videos",
-      description: "List what's popular on YouTube right now.",
+      description: "List what's popular on YouTube right now. Pair with show_stage('watch') + display_videos when the human asks what's trending.",
       inputSchema: {
         type: "object",
         properties: {
@@ -737,7 +858,7 @@
     },
     {
       name: "display_videos",
-      description: "Render video cards into the dashboard's results area so the human can see and tap them. Call this after searching, with the video ids you want to show.",
+      description: "Render video cards onto the dashboard's watch stage so the human can see and tap them. Call show_stage('watch') first if the dashboard isn't on the watch stage, then this — the human never has to navigate.",
       inputSchema: {
         type: "object",
         properties: {
@@ -759,20 +880,20 @@
     },
     {
       name: "play_video",
-      description: "Play a video for the human: the big player in Watch mode, the docked mini player in Build mode.",
+      description: "Play a video in the dashboard's big player (watch stage appears automatically). Use when the human picks a video or asks to play one — don't autoplay unasked.",
       inputSchema: {
         type: "object",
         properties: { video_id: { type: "string", description: "The YouTube video id to play" } },
         required: ["video_id"]
       },
       execute: function (params) {
-        var id = mode === "build" ? dockVideo(params.video_id) : playVideoOnPage(params.video_id);
+        var id = stage === "build" ? dockVideo(params.video_id) : playVideoOnPage(params.video_id);
         return Promise.resolve({ playing: id });
       }
     },
     {
       name: "dock_video",
-      description: "Load a video into the docked mini player so it keeps playing while the human works in Build mode.",
+      description: "Park a video in the docked mini player so it keeps playing while the human works on the build stage. Use when they ask to keep something playing in the background ('dock some lofi while I work').",
       inputSchema: {
         type: "object",
         properties: { video_id: { type: "string", description: "The YouTube video id to dock" } },
@@ -783,8 +904,21 @@
       }
     },
     {
+      name: "open_file",
+      description: "Open a studio file in the dashboard's editor — the build stage pops up automatically with the file loaded. Call this right after studio_write_file so the human sees what you built without clicking anything.",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path in the studio tree, e.g. 'index.html' or 'skills/my-skill/SKILL.md'" } },
+        required: ["path"]
+      },
+      execute: function (params) {
+        openFile(params.path);
+        return Promise.resolve({ opened: params.path });
+      }
+    },
+    {
       name: "studio_list_files",
-      description: "List every file in the studio file tree: files, skills, and plugins.",
+      description: "List every file in the dashboard's file tree: files, skills, and plugins.",
       inputSchema: { type: "object", properties: {} },
       execute: function () { return api("/api/studio/files"); }
     },
@@ -802,7 +936,7 @@
     },
     {
       name: "studio_write_file",
-      description: "Create or overwrite a file in the studio tree. Use this to build with the human — the file appears in the tree and opens in their editor.",
+      description: "Create or overwrite a file in the studio tree. This is how you build with the human: when they ask for something ('build me a landing page', 'add a notes file'), write it here, then call show_stage('build') and open_file so it appears in front of them. The file shows up in the tree and the Files stage instantly.",
       inputSchema: {
         type: "object",
         properties: {
@@ -830,7 +964,7 @@
     },
     {
       name: "read_messages",
-      description: "Read the latest messages in the shared room chat. THIS is how you see what the human typed — use it instead of scraping the page. Poll it to wait for new messages.",
+      description: "Read the latest messages in the shared room chat — THIS is how you see what the human typed in the command bar. Poll it to wait for new messages, then compose the dashboard with show_stage + the other tools.",
       inputSchema: {
         type: "object",
         properties: {
@@ -847,7 +981,7 @@
     },
     {
       name: "send_message",
-      description: "Post a message into the shared room chat as the agent — reply to the human, announce results, or share video ids. The human sees it instantly on the page, and the agent avatar pulses.",
+      description: "Post into the shared room chat as the agent. The human sees it instantly in the agent panel, the avatar pulses, and the activity line updates — this is how you talk back while you work the dashboard.",
       inputSchema: {
         type: "object",
         properties: {
@@ -898,7 +1032,7 @@
 
   /* ---------------- boot ---------------- */
 
-  setMode(mode);
+  setStage(stage);
   updateEditorChrome();
   loadChannel();
   loadTree();
