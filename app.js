@@ -878,12 +878,257 @@
     // dashboard with the command inbox + the other tools.
   }
 
+  /* Small notices from the command bar. */
+  function barToast(msg) {
+    var t = $("#bar-toast");
+    if (!t) return;
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(barToast._timer);
+    barToast._timer = setTimeout(function () { t.hidden = true; }, 3400);
+  }
+
+  /* ---------------- composer: + | dictate | voice ----------------
+   * The bar is the agent's body. + hands it context (photos, room files,
+   * the video playing now) instead of just files. Mic dictates into the
+   * box. The blue button is voice mode: talk, tap, it's sent. */
+
+  var attachments = []; // {kind:"photo",name,dataUrl} | {kind:"file",path} | {kind:"video",videoId,title}
+
+  function currentVideoId() {
+    var dock = $("#dock");
+    if (dock && !dock.hidden && dock.dataset.videoId) return dock.dataset.videoId;
+    var frame = $("#player");
+    if (frame && frame.src) {
+      var m = frame.src.match(/embed\/([^?&#]+)/);
+      if (m) return decodeURIComponent(m[1]);
+    }
+    return null;
+  }
+
+  function renderAttachTray() {
+    var tray = $("#attach-tray");
+    if (!tray) return;
+    tray.innerHTML = "";
+    tray.hidden = attachments.length === 0;
+    attachments.forEach(function (a, i) {
+      var chip = document.createElement("div");
+      chip.className = "attach-chip";
+      var label, sub;
+      if (a.kind === "photo") {
+        var im = document.createElement("img");
+        im.src = a.dataUrl; im.alt = "";
+        chip.appendChild(im);
+        label = a.name;
+      } else if (a.kind === "file") {
+        var doc = document.createElement("span");
+        doc.className = "attach-doc"; doc.textContent = "DOC";
+        chip.appendChild(doc);
+        label = a.path.split("/").pop();
+      } else {
+        var vid = document.createElement("span");
+        vid.className = "attach-doc"; vid.textContent = "▶";
+        chip.appendChild(vid);
+        label = a.title || a.videoId;
+      }
+      var nm = document.createElement("span");
+      nm.className = "attach-name"; nm.textContent = label;
+      var x = document.createElement("button");
+      x.type = "button"; x.className = "attach-x"; x.textContent = "×";
+      x.setAttribute("aria-label", "Remove attachment");
+      x.addEventListener("click", function () { attachments.splice(i, 1); renderAttachTray(); });
+      chip.appendChild(nm); chip.appendChild(x);
+      tray.appendChild(chip);
+    });
+  }
+
+  function handleAttachImage(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type || "")) { barToast("Only images for now."); return; }
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function () {
+      try {
+        var max = 1024;
+        var scale = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
+        var c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        attachments.push({ kind: "photo", name: file.name || "photo.jpg", dataUrl: c.toDataURL("image/jpeg", 0.72) });
+        renderAttachTray();
+      } catch (e) { barToast("Couldn't read that image."); }
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); barToast("Couldn't read that image."); };
+    img.src = url;
+  }
+
+  function openRoomFilePicker() {
+    var sheet = $("#plus-sheet");
+    var files = (typeof treeFiles !== "undefined" ? treeFiles : []).slice().sort(function (a, b) {
+      return (b.updated_at || 0) - (a.updated_at || 0);
+    }).slice(0, 10);
+    if (!files.length) { barToast("No room files yet."); return; }
+    sheet.innerHTML = '<div class="sheet-head">Attach a room file</div>' + files.map(function (f) {
+      return '<button type="button" data-path="' + esc(f.path) + '">' + esc(f.path.split("/").pop()) +
+        '<span class="sheet-file-sub">' + esc(f.path) + "</span></button>";
+    }).join("");
+    Array.prototype.forEach.call(sheet.querySelectorAll("button[data-path]"), function (b) {
+      b.addEventListener("click", function () {
+        attachments.push({ kind: "file", path: b.getAttribute("data-path") });
+        renderAttachTray();
+        resetPlusSheet();
+        sheet.hidden = true;
+      });
+    });
+  }
+
+  function resetPlusSheet() {
+    $("#plus-sheet").innerHTML =
+      '<button type="button" data-act="camera">Take photo</button>' +
+      '<button type="button" data-act="library">Choose from library</button>' +
+      '<button type="button" data-act="roomfile">Attach a room file</button>' +
+      '<button type="button" data-act="video">Attach current video</button>';
+  }
+
+  $("#plus-btn").addEventListener("click", function (ev) {
+    ev.stopPropagation();
+    var sheet = $("#plus-sheet");
+    if (sheet.hidden && !sheet.querySelector("button")) resetPlusSheet();
+    sheet.hidden = !sheet.hidden;
+  });
+  document.addEventListener("click", function (ev) {
+    var sheet = $("#plus-sheet");
+    if (!sheet.hidden && !ev.target.closest("#plus-sheet") && !ev.target.closest("#plus-btn")) {
+      sheet.hidden = true;
+      resetPlusSheet();
+    }
+  });
+  $("#plus-sheet").addEventListener("click", function (ev) {
+    var b = ev.target.closest("button[data-act]");
+    if (!b) return;
+    var act = b.getAttribute("data-act");
+    var sheet = $("#plus-sheet");
+    if (act === "camera" || act === "library") {
+      sheet.hidden = true; resetPlusSheet();
+      var inp = $(act === "camera" ? "#attach-camera" : "#attach-library");
+      inp.value = "";
+      inp.click();
+    } else if (act === "roomfile") {
+      openRoomFilePicker();
+    } else if (act === "video") {
+      var vid = currentVideoId();
+      sheet.hidden = true; resetPlusSheet();
+      if (!vid) { barToast("Nothing playing right now."); return; }
+      var title = ($("#now-playing") && $("#now-playing").textContent || "").replace(/^▶\s*/, "") || vid;
+      attachments.push({ kind: "video", videoId: vid, title: title });
+      renderAttachTray();
+    }
+  });
+  $("#attach-camera").addEventListener("change", function () { handleAttachImage(this.files && this.files[0]); });
+  $("#attach-library").addEventListener("change", function () { handleAttachImage(this.files && this.files[0]); });
+
+  function speechRecog() {
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    return SR ? new SR() : null;
+  }
+
+  /* Mic: dictation. Fills the box, doesn't send. */
+  var dictating = false, dictRecog = null;
+  $("#mic-btn").addEventListener("click", function () {
+    var btn = this;
+    if (dictating) { try { dictRecog.stop(); } catch (e) {} return; }
+    var r = speechRecog();
+    if (!r) { barToast("Dictation isn't supported in this browser — type instead."); return; }
+    var input = $("#command-input");
+    var base = input.value ? input.value.replace(/\s+$/, "") + " " : "";
+    var finalT = "";
+    r.lang = "en-US"; r.interimResults = true; r.continuous = true;
+    r.onresult = function (ev) {
+      var interim = "";
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var tr = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalT += tr + " ";
+        else interim += tr;
+      }
+      input.value = base + finalT + interim;
+    };
+    r.onend = function () { dictating = false; btn.classList.remove("live"); };
+    r.onerror = function () { dictating = false; btn.classList.remove("live"); };
+    dictRecog = r; dictating = true;
+    btn.classList.add("live");
+    try { r.start(); } catch (e) { dictating = false; btn.classList.remove("live"); }
+  });
+
+  /* Blue button: voice mode. Talk, tap to send — it goes straight in. */
+  $("#voice-btn").addEventListener("click", function () {
+    var r = speechRecog();
+    if (!r) { barToast("Voice mode isn't supported in this browser — type or dictate instead."); return; }
+    if (dictating) { try { dictRecog.stop(); } catch (e) {} }
+    var ov = $("#voice-overlay");
+    var vt = $("#voice-transcript");
+    vt.textContent = "";
+    $("#voice-status").textContent = "Listening…";
+    ov.hidden = false;
+    var finalT = "", lastText = "", done = false;
+    r.lang = "en-US"; r.interimResults = true; r.continuous = true;
+    r.onresult = function (ev) {
+      var interim = "";
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var tr = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalT += tr + " ";
+        else interim += tr;
+      }
+      lastText = (finalT + interim).trim();
+      vt.textContent = lastText;
+    };
+    function close(send) {
+      if (done) return; done = true;
+      try { r.stop(); } catch (e) {}
+      ov.hidden = true;
+      if (send && lastText) handleCommand(lastText);
+      else if (send) barToast("Didn't catch that — try again.");
+    }
+    $("#voice-stop").onclick = function () { close(true); };
+    r.onend = function () { close(true); };
+    r.onerror = function (ev) {
+      if (ev && ev.error === "not-allowed") {
+        $("#voice-status").textContent = "Mic blocked — allow microphone access and try again.";
+      }
+    };
+    try { r.start(); } catch (e) { ov.hidden = true; barToast("Couldn't start voice mode."); }
+  });
+
+  /* Submit: photos get persisted to the room first, then the whole
+     command — attachments as context markers — goes to the agent. */
   $("#command-form").addEventListener("submit", function (ev) {
     ev.preventDefault();
     var input = $("#command-input");
-    handleCommand(input.value);
+    var v = input.value;
+    var atts = attachments.slice();
+    attachments = [];
+    renderAttachTray();
     input.value = "";
     input.blur();
+    if (!atts.length) { handleCommand(v); return; }
+    var stamp = Date.now();
+    barToast("Attaching…");
+    Promise.all(atts.map(function (a, i) {
+      if (a.kind === "photo") {
+        var path = "uploads/" + stamp + "-" + i + ".jpg";
+        return api("/api/studio/files", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: path, content: a.dataUrl })
+        }).then(function () { return "[photo " + (i + 1) + ": " + path + "]"; })
+          .catch(function () { return "[photo " + (i + 1) + ": upload failed]"; });
+      }
+      if (a.kind === "file") return Promise.resolve("[file: " + a.path + "]");
+      return Promise.resolve("[video: " + a.videoId + " — " + a.title + "]");
+    })).then(function (marks) {
+      handleCommand((marks.join(" ") + " " + v).trim());
+    });
   });
 
   Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (c) {
