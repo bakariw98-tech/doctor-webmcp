@@ -86,6 +86,7 @@
       b.setAttribute("aria-pressed", on ? "true" : "false");
     });
     if (stage === "files") renderFilesStage();
+    if (stage === "home") renderHome();
   }
 
   Array.prototype.forEach.call(document.querySelectorAll(".stage-tabs button, .drawer-stages button"), function (b) {
@@ -342,6 +343,70 @@
   }
 
   $("#files-filter").addEventListener("input", renderFilesStage);
+
+  /* ---------------- home: the room, inhabited ---------------- */
+
+  function paintHomeContinue() {
+    var box = $("#home-continue");
+    if (!box) return;
+    var has = ($("#home-files").innerHTML || "").length > 0 ||
+              ($("#home-videos").innerHTML || "").length > 0;
+    box.hidden = !has;
+  }
+
+  function renderHome() {
+    var box = $("#home-continue");
+    if (!box) return;
+    // Recent files — the room's actual stuff, not demo props.
+    api("/api/studio/files").then(function (data) {
+      var files = (data.files || []).slice().sort(function (a, b) {
+        return (b.updated_at || 0) - (a.updated_at || 0);
+      }).slice(0, 4);
+      var fbox = $("#home-files");
+      if (files.length) {
+        fbox.innerHTML = '<div class="home-label">Files</div>' + files.map(function (f) {
+          var name = f.path.split("/").pop();
+          return '<button type="button" class="home-file" data-path="' + esc(f.path) + '">' +
+            '<span class="home-file-name">' + esc(name) + '</span>' +
+            '<span class="home-file-path">' + esc(f.path) + '</span></button>';
+        }).join("");
+        Array.prototype.forEach.call(fbox.querySelectorAll(".home-file"), function (b) {
+          b.addEventListener("click", function () {
+            var p = b.getAttribute("data-path");
+            openFile(p, isHtmlPath(p) ? { preview: true } : undefined);
+          });
+        });
+      } else {
+        fbox.innerHTML = "";
+      }
+      paintHomeContinue();
+    }).catch(function () { /* quiet: home still works without the list */ });
+    // Recent videos from the thread — pick up where you left off.
+    api("/api/chat/messages").then(function (data) {
+      var ids = [];
+      (data.messages || []).forEach(function (m) {
+        if (m.kind === "result" && m.video_ids) ids = ids.concat(m.video_ids);
+      });
+      ids = ids.slice(-4).reverse();
+      var vbox = $("#home-videos");
+      if (!ids.length) { vbox.innerHTML = ""; paintHomeContinue(); return; }
+      Promise.all(ids.map(function (id) {
+        return api("/api/tools/details?id=" + encodeURIComponent(id))
+          .then(function (d) { return d.video || null; })
+          .catch(function () { return null; });
+      })).then(function (videos) {
+        videos = videos.filter(function (v) { return !!v; });
+        if (videos.length) {
+          vbox.innerHTML = '<div class="home-label">Recently watched</div>' +
+            '<div class="cards">' + videos.map(cardHTML).join("") + "</div>";
+          wireCards(vbox, playVideoOnPage);
+        } else {
+          vbox.innerHTML = "";
+        }
+        paintHomeContinue();
+      });
+    }).catch(function () { /* quiet */ });
+  }
 
   /* ---------------- editor ---------------- */
 
