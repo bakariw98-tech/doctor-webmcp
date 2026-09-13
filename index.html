@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>YouTube Doctor — ask, watch, together</title>
+<meta name="description" content="A WebMCP-native video room: a human and an AI agent on the same page, searching and watching a doctor's YouTube channel together.">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">▶</span>
+    <div>
+      <div class="brand-title">YouTube Doctor</div>
+      <div class="brand-sub" id="channel-line">loading channel…</div>
+    </div>
+  </div>
+  <div class="status">
+    <span id="demo-badge" class="badge badge-demo" hidden>demo data</span>
+    <span class="webmcp-pill" title="Whether this browser exposes the page's tools to AI agents">
+      <span id="webmcp-dot" class="dot dot-gray"></span>
+      <span id="webmcp-label">checking…</span>
+    </span>
+  </div>
+</header>
+
+<main>
+  <!-- The big prompt -->
+  <section class="hero">
+    <h1>What do you want to watch?</h1>
+    <p class="hero-sub">Type it below — your agent is on this page too, and will find it for you.</p>
+    <form id="ask-form" class="ask-row" autocomplete="off">
+      <input id="ask-input" type="text" placeholder="e.g. find me a video about gut health…" maxlength="300" aria-label="What do you want to watch?">
+      <button type="submit">Ask</button>
+    </form>
+  </section>
+
+  <!-- Embedded player -->
+  <section id="player-section" class="player-section" hidden>
+    <div class="player-head">
+      <div id="now-playing" class="now-playing"></div>
+      <button id="player-close" class="ghost-btn" type="button">✕ close</button>
+    </div>
+    <div class="player-wrap">
+      <iframe id="player" title="Video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+    </div>
+  </section>
+
+  <!-- Generative UI: the agent renders results here via the display_videos tool -->
+  <section class="results-section">
+    <div class="section-head">
+      <h2>Results</h2>
+      <button id="trending-btn" class="ghost-btn" type="button">Show what's trending</button>
+    </div>
+    <div id="results" class="cards" aria-live="polite">
+      <div class="empty">Nothing here yet — ask above, or tap “Show latest uploads”.</div>
+    </div>
+  </section>
+
+  <!-- Shared room: human on phone + agent in browser, same page -->
+  <section class="chat-section">
+    <div class="section-head">
+      <h2>Room chat</h2>
+      <span id="chat-hint" class="muted"></span>
+    </div>
+    <div id="chat-setup" class="chat-setup" hidden>
+      Chat needs its database. In the Vercel dashboard, open the
+      <b>Storage</b> tab, create a <b>KV</b> database, and connect it to this
+      project — then reload. No tokens, no extra accounts.
+    </div>
+    <div id="messages" class="messages" aria-live="polite"></div>
+    <form id="chat-form" class="chat-row" autocomplete="off">
+      <input id="chat-input" type="text" placeholder="Type a message…" maxlength="2000" aria-label="Chat message">
+      <button type="submit">Send</button>
+    </form>
+  </section>
+</main>
+
+<!-- Name picker, first visit only -->
+<div id="name-overlay" class="overlay" hidden>
+  <div class="overlay-card">
+    <h2>Who's here?</h2>
+    <p>Pick a display name so the room knows who's talking.</p>
+    <form id="name-form" autocomplete="off">
+      <input id="name-input" type="text" placeholder="e.g. Bakari, or Agent" maxlength="40" aria-label="Display name">
+      <button type="submit">Join room</button>
+    </form>
+  </div>
+</div>
+
+<footer class="footer">
+  <span>Tools on this page: <code>search_videos</code> · <code>list_trending_videos</code> · <code>get_video_details</code> · <code>display_videos</code> · <code>play_video</code> · <code>read_messages</code> · <code>send_message</code></span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
