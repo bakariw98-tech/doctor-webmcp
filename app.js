@@ -126,6 +126,7 @@
   });
 
   $("#trending-btn").addEventListener("click", function () {
+    lastLocalSearchTs = Date.now();
     api("/api/tools/trending?max=8").then(function (data) {
       displayVideosOnPage(data.videos);
     }).catch(function (err) {
@@ -296,6 +297,25 @@
 
   var chatConfigured = true;
   var lastRenderedIds = "";
+  var lastLocalSearchTs = 0;
+  var lastMirroredResultId = "";
+
+  /** Mirror an agent's result message into the main results section as full
+   *  video cards, so shared videos feel like generative UI — not just chat. */
+  function mirrorResultToResults(msg) {
+    if (!msg || msg.id === lastMirroredResultId) return;
+    if (!(msg.ts > lastLocalSearchTs)) return;
+    lastMirroredResultId = msg.id;
+    var ids = (msg.video_ids || []).slice(0, 8);
+    Promise.all(ids.map(function (id) {
+      return api("/api/tools/details?id=" + encodeURIComponent(id))
+        .then(function (data) { return data.video || null; })
+        .catch(function () { return null; });
+    })).then(function (videos) {
+      videos = videos.filter(function (v) { return !!v; });
+      if (videos.length) displayVideosOnPage(videos);
+    });
+  }
 
   function renderMessages(messages) {
     var box = $("#messages");
@@ -321,6 +341,12 @@
     }).join("");
     wireCards(box);
     box.scrollTop = box.scrollHeight;
+    // If the newest message is a result (videos shared by the agent), mirror
+    // it into the results section as full cards.
+    for (var i = messages.length - 1; i >= 0; i--) {
+      var m = messages[i];
+      if (m.kind === "result" && m.video_ids && m.video_ids.length) { mirrorResultToResults(m); break; }
+    }
   }
 
   function loadMessages() {
@@ -369,6 +395,7 @@
     if (!v) return;
     input.value = "";
     postChat(v);
+    lastLocalSearchTs = Date.now();
     var box = $("#results");
     box.innerHTML = '<div class="empty">Searching…</div>';
     api("/api/tools/search?q=" + encodeURIComponent(v) + "&max=8").then(function (data) {
