@@ -114,6 +114,17 @@
     $("#stage-banner").hidden = true;
   }
   function agentBanner(text) { showBanner("<b>Brodie</b> · " + esc(text), 6000); }
+  function agentBannerFail(text) {
+    var el = $("#stage-banner");
+    showBanner("<b>Brodie</b> · ✗ " + esc(text), 9000);
+    el.classList.add("fail");
+    setTimeout(function () { el.classList.remove("fail"); }, 9500);
+  }
+  /* The banner is the receipt — tap it to see the work behind it. */
+  $("#stage-banner").addEventListener("click", function () {
+    if (!$("#agent-drawer").hidden) return;
+    openDrawer();
+  });
 
   /* ---------------- agent presence ---------------- */
 
@@ -219,6 +230,13 @@
   $("#player-close").addEventListener("click", function () {
     $("#player").src = "";
     $("#player-section").hidden = true;
+  });
+
+  /* Jarvis move: "build me something like this" — one tap, no syntax. */
+  $("#pipe-build").addEventListener("click", function () {
+    var vid = currentVideoId();
+    if (!vid) { barToast("Nothing playing right now."); return; }
+    handleCommand("Pipe @video:" + vid + " to Build");
   });
 
   function runTrending() {
@@ -767,7 +785,7 @@
     api("/api/chat/messages").then(function (data) {
       chatConfigured = data.configured !== false;
       $("#chat-setup").hidden = chatConfigured;
-      if (chatConfigured) renderMessages(data.messages || []);
+      if (chatConfigured) { renderMessages(data.messages || []); paintActivity(data.messages || []); }
     }).catch(function () {
       $("#chat-setup").hidden = false;
     });
@@ -1561,6 +1579,56 @@
   }
 
   /* ---------------- boot ---------------- */
+
+  /* Brodie OS: wake up, don't load. Systems check, then the room. */
+  (function osBoot() {
+    var boot = $("#boot");
+    if (!boot) return;
+    var lines = $("#boot-lines");
+    var systems = ["webmcp link", "voice", "files", "video"];
+    systems.forEach(function (s, i) {
+      setTimeout(function () {
+        var d = document.createElement("div");
+        d.innerHTML = esc(s) + ' <span class="ok">● online</span>';
+        lines.appendChild(d);
+      }, 250 + i * 220);
+    });
+    setTimeout(function () { boot.classList.add("done"); }, 250 + systems.length * 220 + 350);
+    setTimeout(function () { boot.hidden = true; }, 250 + systems.length * 220 + 900);
+  })();
+
+  /* Home activity: the OS proving it does things, live. */
+  function paintActivity(messages) {
+    var box = $("#home-activity");
+    var lines = $("#activity-lines");
+    if (!box || !lines) return;
+    var acts = messages.filter(function (m) { return m.kind === "action"; }).slice(-3).reverse();
+    if (!acts.length) { box.hidden = true; return; }
+    box.hidden = false;
+    lines.innerHTML = acts.map(function (m) {
+      var a = {};
+      try { a = JSON.parse(m.text); } catch (e) { a = { tool: "action", result: m.text }; }
+      return '<div class="activity-line"><b>▸ ' + esc(a.tool || "action") + "</b> " + esc(a.result || "") + "</div>";
+    }).join("");
+  }
+
+  /* The bar invites; rotate what it offers. */
+  (function rotatePlaceholder() {
+    var prompts = [
+      "Tell Brodie what to do…",
+      "I can find anything to watch…",
+      "I can build you a page…",
+      "Talk to me — I do the rest…",
+      "Try the mic — just talk…"
+    ];
+    var i = 0;
+    setInterval(function () {
+      var input = $("#command-input");
+      if (!input || document.activeElement === input || input.value) return;
+      i = (i + 1) % prompts.length;
+      input.setAttribute("placeholder", prompts[i]);
+    }, 6000);
+  })();
 
   setStage(stage);
   updateEditorChrome();

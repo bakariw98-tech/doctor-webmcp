@@ -3,11 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Room OS — tell Brodie what to do</title>
+<title>Brodie OS — tell me what to do</title>
 <meta name="description" content="Room OS: you talk, Brodie does. The dashboard builds itself around your request.">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body data-stage="home">
+
+<!-- Brodie OS boot -->
+<div id="boot" class="boot" aria-hidden="true">
+  <div class="boot-word">BRODIE&nbsp;OS</div>
+  <div class="boot-lines" id="boot-lines"></div>
+</div>
 
 <!-- Name picker, first visit only -->
 <div id="name-overlay" class="overlay" hidden>
@@ -91,6 +97,10 @@
       <div id="home-files" class="home-cards"></div>
       <div id="home-videos" class="home-cards"></div>
     </div>
+    <div id="home-activity" class="home-activity" hidden>
+      <h2>Activity</h2>
+      <div id="activity-lines"></div>
+    </div>
   </section>
 
   <!-- WATCH -->
@@ -103,6 +113,7 @@
     <section id="player-section" class="player-section" hidden>
       <div class="player-head">
         <div id="now-playing" class="now-playing"></div>
+        <button id="pipe-build" class="ghost-btn" type="button">⇢ build with this</button>
         <button id="player-close" class="ghost-btn" type="button">✕ close</button>
       </div>
       <div class="player-wrap">

@@ -510,6 +510,9 @@ body:not([data-stage="home"]) .bar-btn { width: 40px; height: 40px; }
   animation: banner-in 0.24s ease;
 }
 .stage-banner[hidden] { display: none; }
+.stage-banner { cursor: pointer; }
+.stage-banner.fail { border-color: rgba(255, 93, 93, 0.5); }
+.stage-banner.fail .banner-dot { background: #ff5d5d; }
 .stage-banner .banner-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent);
@@ -1163,3 +1166,72 @@ body:not([data-stage="home"]) .bar-btn { width: 40px; height: 40px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Brodie OS boot: it should feel like waking someone up, not loading a page. */
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: #04060b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  transition: opacity 0.45s ease;
+}
+.boot.done { opacity: 0; pointer-events: none; }
+.boot[hidden] { display: none; }
+.boot-word {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  color: var(--text);
+  animation: boot-in 0.7s ease both;
+}
+.boot-word::after {
+  content: "";
+  display: block;
+  height: 2px;
+  margin-top: 14px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: boot-in 0.7s ease both;
+}
+.boot-lines {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 88px;
+  text-align: left;
+}
+.boot-lines div { animation: boot-in 0.25s ease both; }
+.boot-lines .ok { color: var(--accent); }
+@keyframes boot-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* Home activity: proof the OS does things, live. */
+.home-activity { margin-top: 26px; }
+.home-activity h2 {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  margin: 0 0 10px;
+}
+.home-activity[hidden] { display: none; }
+#activity-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.activity-line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.activity-line b { color: var(--text); font-weight: 700; }
