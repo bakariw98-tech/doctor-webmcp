@@ -98,6 +98,7 @@
   function clearActivityOverride() { activityOverride = ""; }
 
   function summarizeAgentMessage(m) {
+    if (m.kind === "command") return "rearranged the dashboard";
     if (m.kind === "result" && m.video_ids && m.video_ids.length) {
       var n = m.video_ids.length;
       return "shared " + n + " video" + (n === 1 ? "" : "s");
@@ -621,9 +622,35 @@
   function newestAgentMessage(messages) {
     for (var i = messages.length - 1; i >= 0; i--) {
       var m = messages[i];
+      if (m.kind === "command") continue; // invisible control messages
       if (m.name && m.name !== me) return m;
     }
     return null;
+  }
+
+  /* ------- remote agent control: the agent composes the dashboard -------
+   * The in-room agent (posting as "Brodie") can drive the stage by sending
+   * chat messages with kind:"command" and a JSON body, e.g.
+   *   {"action":"show_stage","view":"build"}
+   *   {"action":"open_file","path":"notes.md"}
+   *   {"action":"dock","video_id":"dQw4w9WgXcQ"}
+   * Commands are invisible in the chat and run once, newest-first. Only
+   * messages from the agent name are honored. */
+  var executedCommands = {};
+  function runAgentCommands(messages) {
+    for (var i = 0; i < messages.length; i++) {
+      var m = messages[i];
+      if (m.kind !== "command" || m.name !== "Brodie" || executedCommands[m.id]) continue;
+      executedCommands[m.id] = true;
+      var cmd = null;
+      try { cmd = JSON.parse(m.text); } catch (e) { cmd = null; }
+      if (!cmd || !cmd.action) continue;
+      try {
+        if (cmd.action === "show_stage" && typeof cmd.view === "string") setStage(cmd.view);
+        else if (cmd.action === "open_file" && typeof cmd.path === "string") openFile(cmd.path);
+        else if (cmd.action === "dock" && typeof cmd.video_id === "string") dockVideo(cmd.video_id);
+      } catch (e) { /* a bad command never breaks the room */ }
+    }
   }
 
   function renderMessages(messages) {
@@ -648,6 +675,7 @@
     } else {
       paintMessages(messages);
     }
+    runAgentCommands(messages);
   }
 
   function paintMessages(messages) {
@@ -658,6 +686,7 @@
       return;
     }
     box.innerHTML = messages.map(function (m) {
+      if (m.kind === "command") return ""; // invisible control messages
       var cls = "msg" + (m.name === me ? " mine" : "") + (m.kind === "result" ? " result" : "");
       var html = '<div class="' + cls + '"><div class="who">' + esc(m.name) + "</div>" +
         '<div class="bubble">' + esc(m.text) + "</div>";
