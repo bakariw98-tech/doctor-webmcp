@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>YouTube Doctor — ask, watch, together</title>
-<meta name="description" content="A WebMCP-native video room: a human and an AI agent on the same page, searching and watching a doctor's YouTube channel together.">
+<title>YouTube Doctor — watch, build, together</title>
+<meta name="description" content="One dashboard: watch YouTube with an AI agent, vibe-code in the studio, and talk to the agent the whole time.">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -29,10 +29,24 @@
       <div class="brand-sub" id="channel-line">loading channel…</div>
     </div>
   </div>
-  <nav class="room-tabs" aria-label="Rooms">
-    <a class="room-tab active" href="/index.html" aria-current="page">Watch</a>
-    <a class="room-tab" href="/studio.html">Studio</a>
+
+  <!-- The agent is visibly behind the dashboard -->
+  <div class="agent-presence" id="agent-presence" title="Brodie is in the room">
+    <div class="agent-avatar" id="agent-avatar">
+      <span class="avatar-initial">B</span>
+      <span class="presence-dot" aria-label="online"></span>
+    </div>
+    <div class="agent-meta">
+      <div class="agent-name">Brodie</div>
+      <div class="agent-activity" id="agent-activity">connecting…</div>
+    </div>
+  </div>
+
+  <nav class="mode-switch" aria-label="Dashboard mode">
+    <button class="mode-btn active" type="button" data-mode="watch" aria-pressed="true">Watch</button>
+    <button class="mode-btn" type="button" data-mode="build" aria-pressed="false">Build</button>
   </nav>
+
   <div class="status">
     <span id="demo-badge" class="badge badge-demo" hidden>demo data</span>
     <span class="webmcp-pill" title="Whether this browser exposes the page's tools to AI agents">
@@ -42,44 +56,90 @@
   </div>
 </header>
 
-<main>
-  <!-- The big prompt -->
-  <section class="hero">
-    <h1>What do you want to watch?</h1>
-    <p class="hero-sub">Type it below — your agent is on this page too, and will find it for you.</p>
-    <form id="ask-form" class="ask-row" autocomplete="off">
-      <input id="ask-input" type="text" placeholder="e.g. find me a video about gut health…" maxlength="300" aria-label="What do you want to watch?">
-      <button type="submit">Ask</button>
-    </form>
-  </section>
+<div class="dash">
+  <!-- Left rail: the file tree, always there -->
+  <aside class="rail studio-panel tree-rail" aria-label="File tree">
+    <div class="panel-head">
+      <span class="panel-label">Explorer</span>
+      <button id="new-file-btn" class="ghost-btn" type="button" title="New file">+ New</button>
+    </div>
+    <div id="tree" class="tree" role="tree" aria-label="Studio files"></div>
+    <div id="tree-status" class="panel-foot muted"></div>
+  </aside>
 
-  <!-- Embedded player -->
-  <section id="player-section" class="player-section" hidden>
-    <div class="player-head">
-      <div id="now-playing" class="now-playing"></div>
-      <button id="player-close" class="ghost-btn" type="button">✕ close</button>
-    </div>
-    <div class="player-wrap">
-      <iframe id="player" title="Video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-    </div>
-  </section>
+  <!-- Center stage: one surface, two modes. Switching never reloads. -->
+  <main class="stage">
+    <!-- WATCH MODE -->
+    <section id="watch-stage" class="stage-pane" aria-label="Watch">
+      <div class="hero">
+        <h1>What do you want to watch?</h1>
+        <p class="hero-sub">Type it below — Brodie is on this page too, and will find it for you.</p>
+        <form id="ask-form" class="ask-row" autocomplete="off">
+          <input id="ask-input" type="text" placeholder="e.g. find me a video about gut health…" maxlength="300" aria-label="What do you want to watch?">
+          <button type="submit">Ask</button>
+        </form>
+      </div>
 
-  <!-- Generative UI: the agent renders results here via the display_videos tool -->
-  <section class="results-section">
-    <div class="section-head">
-      <h2>Results</h2>
-      <button id="trending-btn" class="ghost-btn" type="button">Show what's trending</button>
-    </div>
-    <div id="results" class="cards" aria-live="polite">
-      <div class="empty">Nothing here yet — ask above, or tap “Show latest uploads”.</div>
-    </div>
-  </section>
+      <section id="player-section" class="player-section" hidden>
+        <div class="player-head">
+          <div id="now-playing" class="now-playing"></div>
+          <button id="player-close" class="ghost-btn" type="button">✕ close</button>
+        </div>
+        <div class="player-wrap">
+          <iframe id="player" title="Video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+      </section>
 
-  <!-- Shared room: human on phone + agent in browser, same page -->
-  <section class="chat-section">
-    <div class="section-head">
-      <h2>Room chat</h2>
-      <span id="chat-hint" class="muted"></span>
+      <section class="results-section">
+        <div class="section-head">
+          <h2>Results</h2>
+          <button id="trending-btn" class="ghost-btn" type="button">Show what's trending</button>
+        </div>
+        <div id="results" class="cards" aria-live="polite">
+          <div class="empty">Nothing here yet — ask above, or tap “Show what's trending”.</div>
+        </div>
+      </section>
+    </section>
+
+    <!-- BUILD MODE -->
+    <section id="build-stage" class="stage-pane build-pane" aria-label="Build" hidden>
+      <div class="build-toolbar">
+        <div class="dock-search-wrap">
+          <form id="dock-search-form" class="dock-search" autocomplete="off">
+            <input id="dock-search-input" type="text" placeholder="Dock a video… e.g. lofi beats" maxlength="200" aria-label="Search YouTube to dock a video">
+            <button type="submit">Dock</button>
+          </form>
+          <div id="dock-results" class="dock-results" hidden></div>
+        </div>
+        <span class="muted build-hint">video keeps playing while you work</span>
+      </div>
+      <div class="panel-head editor-head">
+        <div class="editor-path-wrap">
+          <span id="dirty-dot" class="dirty-dot" hidden title="Unsaved changes"></span>
+          <span id="editor-path" class="editor-path">No file open</span>
+        </div>
+        <div class="editor-actions">
+          <button id="preview-toggle" class="ghost-btn" type="button" hidden>Preview</button>
+          <button id="delete-file-btn" class="ghost-btn danger" type="button" hidden>Delete</button>
+          <button id="save-file-btn" type="button" hidden>Save</button>
+        </div>
+      </div>
+      <div id="editor-empty" class="editor-empty">
+        <p class="editor-empty-title">Pick a file from the tree</p>
+        <p class="muted">or press <b>+ New</b> to start one. Brodie can write files here too — just ask in the chat.</p>
+      </div>
+      <textarea id="editor" class="editor" hidden spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="File editor"></textarea>
+      <iframe id="preview" class="preview" hidden sandbox="allow-scripts" title="HTML preview"></iframe>
+      <div id="save-status" class="save-status muted"></div>
+    </section>
+  </main>
+
+  <!-- Right panel: the agent -->
+  <aside class="rail studio-panel chat-panel agent-rail" aria-label="Agent">
+    <div class="panel-head">
+      <span class="panel-label">Agent</span>
+      <!-- Voice mode seam: button is intentionally disabled until voice ships. -->
+      <button id="voice-btn" class="ghost-btn" type="button" disabled title="Voice mode — coming soon" data-voice="soon">◉ Voice</button>
     </div>
     <div id="chat-setup" class="chat-setup" hidden>
       Chat needs its database. In the Vercel dashboard, add the
@@ -87,15 +147,28 @@
       project — then reload. No tokens, no extra accounts.
     </div>
     <div id="messages" class="messages" aria-live="polite"></div>
+    <div id="typing" class="typing" hidden aria-label="Brodie is typing"><span></span><span></span><span></span></div>
     <form id="chat-form" class="chat-row" autocomplete="off">
-      <input id="chat-input" type="text" placeholder="Type a message…" maxlength="2000" aria-label="Chat message">
+      <input id="chat-input" type="text" placeholder="Talk to Brodie…" maxlength="2000" aria-label="Chat message">
       <button type="submit">Send</button>
     </form>
-  </section>
-</main>
+    <div class="panel-foot"><span id="chat-hint" class="muted"></span></div>
+  </aside>
+</div>
+
+<!-- Mini player: docked, keeps playing across modes -->
+<div id="dock" class="dock" hidden>
+  <div class="dock-head">
+    <span id="dock-title" class="dock-title">Mini player</span>
+    <button id="dock-close" class="dock-x" type="button" aria-label="Close mini player">✕</button>
+  </div>
+  <div class="dock-video">
+    <iframe id="dock-player" title="Mini video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+  </div>
+</div>
 
 <footer class="footer">
-  <span>Tools on this page: <code>search_videos</code> · <code>list_trending_videos</code> · <code>get_video_details</code> · <code>display_videos</code> · <code>play_video</code> · <code>read_messages</code> · <code>send_message</code></span>
+  <span>Tools on this page: <code>search_videos</code> · <code>list_trending_videos</code> · <code>get_video_details</code> · <code>display_videos</code> · <code>play_video</code> · <code>dock_video</code> · <code>studio_list_files</code> · <code>studio_read_file</code> · <code>studio_write_file</code> · <code>read_messages</code> · <code>send_message</code></span>
 </footer>
 
 <script src="/app.js"></script>

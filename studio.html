@@ -2,104 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Studio — vibe coding room</title>
-<meta name="description" content="A vibe coding room: file tree, calm editor, live preview, room chat, and a mini video player that keeps playing while you work.">
-<link rel="stylesheet" href="/style.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio — moved</title>
+<meta http-equiv="refresh" content="0; url=/index.html">
+<link rel="canonical" href="/index.html">
+<script>location.replace("/index.html");</script>
 </head>
-<body class="studio">
-
-<!-- Name picker, first visit only -->
-<div id="name-overlay" class="overlay" hidden>
-  <div class="overlay-card">
-    <h2>Who's here?</h2>
-    <p>Pick a display name so the room knows who's talking.</p>
-    <form id="name-form" autocomplete="off">
-      <input id="name-input" type="text" placeholder="e.g. Bakari, or Agent" maxlength="40" aria-label="Display name">
-      <button type="submit">Join room</button>
-    </form>
-  </div>
-</div>
-
-<header class="topbar studio-topbar">
-  <div class="brand">
-    <span class="brand-mark brand-mark-studio">&lt;/&gt;</span>
-    <div>
-      <div class="brand-title">Studio</div>
-      <div class="brand-sub">vibe coding room</div>
-    </div>
-  </div>
-  <nav class="room-tabs" aria-label="Rooms">
-    <a class="room-tab" href="/index.html">Watch</a>
-    <a class="room-tab active" href="/studio.html" aria-current="page">Studio</a>
-  </nav>
-  <div class="dock-search-wrap">
-    <form id="dock-search-form" class="dock-search" autocomplete="off">
-      <input id="dock-search-input" type="text" placeholder="Dock a video… e.g. lofi beats" maxlength="200" aria-label="Search YouTube to dock a video">
-      <button type="submit">Dock</button>
-    </form>
-    <div id="dock-results" class="dock-results" hidden></div>
-  </div>
-</header>
-
-<main class="studio-main">
-  <!-- File tree -->
-  <aside class="studio-panel tree-panel" aria-label="File tree">
-    <div class="panel-head">
-      <span class="panel-label">Explorer</span>
-      <button id="new-file-btn" class="ghost-btn" type="button" title="New file">+ New</button>
-    </div>
-    <div id="tree" class="tree" role="tree" aria-label="Studio files"></div>
-    <div id="tree-status" class="panel-foot muted"></div>
-  </aside>
-
-  <!-- Editor -->
-  <section class="studio-panel editor-panel" aria-label="Editor">
-    <div class="panel-head editor-head">
-      <div class="editor-path-wrap">
-        <span id="dirty-dot" class="dirty-dot" hidden title="Unsaved changes"></span>
-        <span id="editor-path" class="editor-path">No file open</span>
-      </div>
-      <div class="editor-actions">
-        <button id="preview-toggle" class="ghost-btn" type="button" hidden>Preview</button>
-        <button id="delete-file-btn" class="ghost-btn danger" type="button" hidden>Delete</button>
-        <button id="save-file-btn" type="button" hidden>Save</button>
-      </div>
-    </div>
-    <div id="editor-empty" class="editor-empty">
-      <p class="editor-empty-title">Pick a file from the tree</p>
-      <p class="muted">or press <b>+ New</b> to start one. The agent can write files here too — just ask in the chat.</p>
-    </div>
-    <textarea id="editor" class="editor" hidden spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="File editor"></textarea>
-    <iframe id="preview" class="preview" hidden sandbox="allow-scripts" title="HTML preview"></iframe>
-    <div id="save-status" class="save-status muted"></div>
-  </section>
-
-  <!-- Room chat -->
-  <aside class="studio-panel chat-panel" aria-label="Room chat">
-    <div class="panel-head">
-      <span class="panel-label">Room chat</span>
-      <span id="studio-chat-hint" class="muted"></span>
-    </div>
-    <div id="studio-messages" class="messages studio-messages" aria-live="polite"></div>
-    <form id="studio-chat-form" class="chat-row" autocomplete="off">
-      <input id="studio-chat-input" type="text" placeholder="Talk to the agent…" maxlength="2000" aria-label="Chat message">
-      <button type="submit">Send</button>
-    </form>
-  </aside>
-</main>
-
-<!-- Mini player: stays docked while you work -->
-<div id="dock" class="dock" hidden>
-  <div class="dock-head">
-    <span id="dock-title" class="dock-title">Mini player</span>
-    <button id="dock-close" class="dock-x" type="button" aria-label="Close mini player">✕</button>
-  </div>
-  <div class="dock-video">
-    <iframe id="dock-player" title="Mini video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-  </div>
-</div>
-
-<script src="/studio.js"></script>
+<body>
+<p>The studio is now part of the dashboard: <a href="/index.html">open it here</a>.</p>
 </body>
 </html>
