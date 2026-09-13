@@ -1,13 +1,18 @@
-/* Taste Room — the training harness.
- * Brodie makes two variations. You pick the winner, say why if you want.
- * Every pick sharpens your taste profile (localStorage), and the profile
- * steers every future round. The harness is the product; the agent is
- * interchangeable; the profile is the asset. */
+/* Taste Room — the training harness, WebMCP edition.
+ *
+ * The room posts a job. Brodie (the agent on the other end) picks it up,
+ * generates the two variations himself, and uploads them back into the room.
+ * No third-party image API: the agent is the compute.
+ *
+ * Flow: prompt -> POST /api/taste/jobs -> poll job status ->
+ *   done -> fetch each image data URI -> pick winner -> profile learns.
+ */
 (function () {
   "use strict";
 
-  var API = "/api/taste/generate";
+  var JOBS_API = "/api/taste/jobs";
   var KEY = "brodie_taste_profile_v1";
+  var POLL_MS = 4000;
 
   function $(sel) { return document.querySelector(sel); }
 
@@ -23,7 +28,8 @@
   }
 
   var profile = loadProfile();
-  var current = null; // { prompt, a, b } — the live round
+  var current = null; // { prompt, jobId, a, b } — the live round
+  var pollTimer = null;
   var busy = false;
 
   function esc(s) {
@@ -65,66 +71,107 @@
     $("#taste-status").textContent = msg || "";
   }
 
-  function setArenaLoading() {
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function setArenaWaiting() {
     var arena = $("#taste-arena");
     arena.hidden = false;
     ["a", "b"].forEach(function (side) {
       var img = $("#taste-img-" + side);
       img.removeAttribute("src");
-      img.alt = "Brodie is creating variation " + side.toUpperCase() + "…";
+      img.alt = "Waiting for Brodie…";
       $("#taste-card-" + side).classList.add("loading");
       $("#taste-card-" + side).classList.remove("winner");
-      $("#taste-label-" + side).textContent = "creating…";
+      $("#taste-label-" + side).textContent = "brodie is creating…";
     });
     $("#taste-why").hidden = true;
-    setStatus("Brodie is making two variations…");
   }
 
-  function renderRound() {
-    ["a", "b"].forEach(function (side) {
-      var data = current[side];
-      var img = $("#taste-img-" + side);
-      var card = $("#taste-card-" + side);
-      card.classList.remove("loading");
-      img.alt = "Variation " + side.toUpperCase() + " — " + data.styleLabel;
-      $("#taste-label-" + side).textContent = data.styleLabel;
-      img.src = data.url; // start the fetch now
-    });
-    setStatus("Pick the one you like. The pick alone trains — the why is bonus.");
-  }
-
-  function generate(prompt) {
+  function submitJob(prompt) {
     if (busy) return;
     busy = true;
-    setArenaLoading();
-    var payload = {
-      prompt: prompt,
-      likes: topTags(profile.likes, 12),
-      dislikes: topTags(profile.dislikes, 12),
-    };
-    fetch(API, {
+    stopPolling();
+    setArenaWaiting();
+    setStatus("Sent to Brodie — he's picking it up…");
+    fetch(JOBS_API, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        prompt: prompt,
+        likes: topTags(profile.likes, 12),
+        dislikes: topTags(profile.dislikes, 12),
+      }),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        busy = false;
-        if (!data || !data.ok || !data.images || data.images.length < 2) {
-          setStatus("Hmm, that round failed to generate. Try again.");
+        if (!data || !data.ok || !data.job_id) {
+          busy = false;
+          setStatus("Couldn't post that job. Try again.");
           return;
         }
-        current = { prompt: prompt, a: data.images[0], b: data.images[1] };
-        renderRound();
+        current = { prompt: prompt, jobId: data.job_id, a: null, b: null };
+        pollJob();
+        pollTimer = setInterval(pollJob, POLL_MS);
       })
       .catch(function () {
         busy = false;
-        setStatus("Couldn't reach the generator. Check your connection and try again.");
+        setStatus("Couldn't reach the room. Check your connection and try again.");
       });
   }
 
+  function pollJob() {
+    if (!current) return;
+    fetch(JOBS_API + "?id=" + encodeURIComponent(current.jobId))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok || !data.job) return;
+        var status = data.job.status;
+        if (status === "working") {
+          setStatus("Brodie is making two variations…");
+        } else if (status === "failed") {
+          stopPolling();
+          busy = false;
+          setStatus("Brodie couldn't make these — try again or rephrase.");
+        } else if (status === "done" && data.images && data.images.length >= 2) {
+          stopPolling();
+          loadImages(data.images);
+        }
+        // pending: keep the "picking it up" message, keep polling
+      })
+      .catch(function () { /* transient — next poll retries */ });
+  }
+
+  function loadImages(images) {
+    setStatus("Brodie's back — pick the one you like. The pick alone trains; the why is bonus.");
+    var done = 0;
+    images.slice(0, 2).forEach(function (meta, i) {
+      var side = i === 0 ? "a" : "b";
+      fetch(meta.url)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.ok && d.dataUri) {
+            var card = $("#taste-card-" + side);
+            card.classList.remove("loading");
+            var img = $("#taste-img-" + side);
+            img.alt = "Variation " + side.toUpperCase() + " — " + (meta.styleLabel || "by Brodie");
+            img.src = d.dataUri;
+            $("#taste-label-" + side).textContent = meta.styleLabel || "Brodie's take";
+            current[side] = { tags: meta.tags || [], styleLabel: meta.styleLabel || "" };
+          }
+          done++;
+          if (done === 2) busy = false;
+        })
+        .catch(function () {
+          done++;
+          if (done === 2) { busy = false; setStatus("One variation didn't load — try the round again."); }
+        });
+    });
+  }
+
   function pick(side) {
-    if (!current || busy) return;
+    if (!current || !current.a || !current.b || busy) return;
     var winner = current[side];
     var loser = current[side === "a" ? "b" : "a"];
 
@@ -141,11 +188,10 @@
     $("#taste-card-a").classList.toggle("winner", side === "a");
     $("#taste-card-b").classList.toggle("winner", side === "b");
     $("#taste-why-title").innerHTML =
-      "Nice pick — <b>" + esc(winner.styleLabel) + "</b>. Want to say why? " +
-      '<span class="muted">(optional)</span>';
+      "Nice pick" + (winner.styleLabel ? " — <b>" + esc(winner.styleLabel) + "</b>" : "") +
+      ". Want to say why? " + '<span class="muted">(optional)</span>';
     $("#taste-why").hidden = false;
     $("#taste-why-input").value = "";
-    $("#taste-why-input").focus();
     setStatus("Logged. Your profile just got sharper — watch it steer the next round.");
   }
 
@@ -157,7 +203,7 @@
       renderProfile(false);
     }
     $("#taste-why").hidden = true;
-    if (current) generate(current.prompt);
+    if (current) submitJob(current.prompt);
   }
 
   function reset() {
@@ -169,14 +215,14 @@
   }
 
   function init() {
-    if (!$("#taste-form")) return; // stage not in this build
+    if (!$("#taste-form")) return;
     renderProfile(false);
 
     $("#taste-form").addEventListener("submit", function (e) {
       e.preventDefault();
       var p = $("#taste-prompt").value.trim();
       if (!p) { setStatus("Give Brodie a prompt first — anything visual."); return; }
-      generate(p);
+      submitJob(p);
     });
 
     document.querySelectorAll(".taste-pick").forEach(function (btn) {
