@@ -58,10 +58,10 @@
     loadMessages();
   });
 
-  /* ---------------- stages: home | watch | build | files ----------------
+  /* ---------------- stages: home | watch | build | files | taste ----------------
    * The agent composes the stage. The tabs are the quiet manual fallback. */
 
-  var STAGES = ["home", "watch", "build", "files"];
+  var STAGES = ["home", "watch", "build", "files", "taste"];
   var stage = "home";
   try {
     var saved = localStorage.getItem("ydoc_stage");
@@ -77,7 +77,8 @@
       home: $("#home-stage"),
       watch: $("#watch-stage"),
       build: $("#build-stage"),
-      files: $("#files-stage")
+      files: $("#files-stage"),
+      taste: $("#taste-stage")
     };
     STAGES.forEach(function (s) { panes[s].hidden = s !== stage; });
     Array.prototype.forEach.call(document.querySelectorAll("[data-stage]"), function (b) {

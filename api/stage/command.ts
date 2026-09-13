@@ -20,7 +20,7 @@ import { chatConfigured, postMessage } from "../_lib/chat-store.js";
 import type { ApiRequest, ApiResponse } from "../_lib/types.js";
 
 const ACTIONS = ["show_stage", "open_file", "preview_file", "dock", "announce"];
-const STAGES = ["home", "watch", "build", "files"];
+const STAGES = ["home", "watch", "build", "files", "taste"];
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });

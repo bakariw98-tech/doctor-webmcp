@@ -38,6 +38,7 @@
     <button type="button" data-stage="watch">Watch</button>
     <button type="button" data-stage="build">Build</button>
     <button type="button" data-stage="files">Files</button>
+    <button type="button" data-stage="taste">Taste</button>
   </nav>
 
   <!-- The agent is visibly behind the dashboard. Tap to open the thread. -->
@@ -164,6 +165,57 @@
     <div id="files-browser" class="files-browser" aria-live="polite"></div>
   </section>
 
+  <!-- TASTE — the training harness room -->
+  <section id="taste-stage" class="stage-pane taste-pane" aria-label="Taste" hidden>
+    <div class="taste-head">
+      <h1>Train Brodie's eye</h1>
+      <p class="muted">Give a prompt. Brodie makes <b>two variations</b>. Pick the one you like — say why if you want. Every pick sharpens your <b>taste profile</b>, so plain prompts start coming out in <i>your</i> taste.</p>
+    </div>
+    <div class="taste-layout">
+      <div class="taste-main">
+        <form id="taste-form" class="taste-form" autocomplete="off">
+          <input id="taste-prompt" type="text" placeholder="e.g. a coffee shop logo" maxlength="300" aria-label="What should Brodie create">
+          <button type="submit" id="taste-go">Make two variations</button>
+        </form>
+        <div id="taste-status" class="taste-status muted" aria-live="polite"></div>
+        <div id="taste-arena" class="taste-arena" hidden>
+          <div class="taste-card" id="taste-card-a">
+            <div class="taste-img-wrap"><img id="taste-img-a" alt="Variation A"></div>
+            <div class="taste-card-meta"><span id="taste-label-a" class="taste-style"></span></div>
+            <button type="button" class="taste-pick" data-pick="a">Pick this one</button>
+          </div>
+          <div class="taste-vs" aria-hidden="true">vs</div>
+          <div class="taste-card" id="taste-card-b">
+            <div class="taste-img-wrap"><img id="taste-img-b" alt="Variation B"></div>
+            <div class="taste-card-meta"><span id="taste-label-b" class="taste-style"></span></div>
+            <button type="button" class="taste-pick" data-pick="b">Pick this one</button>
+          </div>
+        </div>
+        <div id="taste-why" class="taste-why" hidden>
+          <p id="taste-why-title"></p>
+          <form id="taste-why-form" autocomplete="off">
+            <input id="taste-why-input" type="text" placeholder="e.g. warmer, less cluttered" maxlength="200" aria-label="Why did you pick it">
+            <button type="submit">Next round →</button>
+          </form>
+        </div>
+      </div>
+      <aside class="taste-profile" aria-label="Your taste profile">
+        <div class="taste-profile-head">
+          <h2>Taste profile</h2>
+          <span id="taste-rounds" class="taste-rounds">0 rounds</span>
+        </div>
+        <p class="muted taste-profile-sub">This is the asset. It grows every round and steers every future prompt.</p>
+        <h3>Likes</h3>
+        <div id="taste-likes" class="taste-tags"></div>
+        <h3>Steers away from</h3>
+        <div id="taste-dislikes" class="taste-tags"></div>
+        <h3>Notes</h3>
+        <div id="taste-notes" class="taste-notes"></div>
+        <button id="taste-reset" class="ghost-btn danger" type="button">Start over</button>
+      </aside>
+    </div>
+  </section>
+
   <!-- Mini player: desktop card bottom-right; a slim strip above the
        command bar on the phone. Keeps playing across stages. -->
   <div id="dock" class="dock" hidden>
@@ -194,6 +246,7 @@
     <button type="button" data-stage="watch">Watch</button>
     <button type="button" data-stage="build">Build</button>
     <button type="button" data-stage="files">Files</button>
+    <button type="button" data-stage="taste">Taste</button>
   </div>
   <div id="chat-setup" class="chat-setup" hidden>
     Chat needs its database. In the Vercel dashboard, add the
@@ -220,5 +273,6 @@
 <div id="bar-toast" class="bar-toast" hidden></div>
 
 <script src="/app.js"></script>
+<script src="/taste.js"></script>
 </body>
 </html>

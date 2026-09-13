@@ -1225,3 +1225,171 @@ body:not([data-stage="home"]) .bar-btn { width: 40px; height: 40px; }
   text-overflow: ellipsis;
 }
 .activity-line b { color: var(--text); font-weight: 600; }
+
+/* ---------------- Taste Room — the training harness ---------------- */
+.taste-pane { max-width: 1100px; }
+.taste-head h1 { margin: 0 0 6px; font-size: 22px; }
+.taste-head p { margin: 0 0 18px; max-width: 640px; }
+.taste-head b { color: var(--text); }
+
+.taste-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+}
+
+.taste-form { display: flex; gap: 10px; margin-bottom: 10px; }
+.taste-form input {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  padding: 12px 14px;
+  font: inherit;
+  min-height: 48px;
+}
+.taste-form input:focus { outline: none; border-color: var(--accent); }
+.taste-form button {
+  background: var(--accent);
+  color: #04101f;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 12px 18px;
+  min-height: 48px;
+  white-space: nowrap;
+}
+.taste-form button:active { transform: scale(0.98); }
+
+.taste-status { min-height: 22px; margin-bottom: 10px; }
+
+.taste-arena {
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.taste-arena[hidden] { display: none; }
+
+.taste-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.taste-card.winner { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+.taste-img-wrap {
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.taste-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.taste-card.loading .taste-img-wrap {
+  background: linear-gradient(100deg, var(--panel-2) 40%, #1d2740 50%, var(--panel-2) 60%);
+  background-size: 200% 100%;
+  animation: taste-shimmer 1.2s infinite;
+}
+@keyframes taste-shimmer { to { background-position: -200% 0; } }
+.taste-card-meta { display: flex; justify-content: center; }
+.taste-style {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.taste-card.winner .taste-style { color: var(--ok); }
+.taste-pick {
+  background: rgba(77, 163, 255, 0.12);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 48px;
+}
+.taste-pick:active { transform: scale(0.98); }
+.taste-card.winner .taste-pick { background: rgba(126, 226, 168, 0.12); border-color: var(--ok); }
+
+.taste-vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.taste-why { margin-top: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.taste-why[hidden] { display: none; }
+.taste-why p { margin: 0 0 10px; }
+.taste-why form { display: flex; gap: 10px; }
+.taste-why input {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+  min-height: 44px;
+}
+.taste-why input:focus { outline: none; border-color: var(--accent); }
+.taste-why button {
+  background: var(--accent);
+  color: #04101f;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 10px 16px;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.taste-profile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  position: sticky;
+  top: calc(var(--topbar-h) + 12px);
+}
+.taste-profile-head { display: flex; align-items: baseline; justify-content: space-between; }
+.taste-profile h2 { margin: 0; font-size: 15px; }
+.taste-profile h3 { margin: 14px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+.taste-rounds { font-size: 12px; color: var(--muted); font-weight: 700; }
+.taste-profile-sub { margin: 6px 0 0; font-size: 12.5px; }
+.taste-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.taste-tag {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 20px;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+}
+.taste-tag.like { color: var(--ok); border-color: rgba(126, 226, 168, 0.4); background: rgba(126, 226, 168, 0.07); }
+.taste-tag.dislike { color: var(--danger); border-color: rgba(255, 122, 122, 0.35); background: rgba(255, 122, 122, 0.06); }
+.taste-tag.flash { animation: taste-flash 0.9s ease; }
+@keyframes taste-flash { 0% { box-shadow: 0 0 0 3px rgba(126, 226, 168, 0.5); } 100% { box-shadow: none; } }
+.taste-notes { display: flex; flex-direction: column; gap: 6px; }
+.taste-note { font-size: 12.5px; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
+.taste-profile .ghost-btn { margin-top: 14px; width: 100%; }
+
+@media (max-width: 860px) {
+  .taste-layout { grid-template-columns: 1fr; }
+  .taste-profile { position: static; }
+  .taste-arena { grid-template-columns: 1fr; }
+  .taste-vs { padding: 2px 0; }
+  .taste-form { flex-direction: column; }
+  .taste-why form { flex-direction: column; }
+}
