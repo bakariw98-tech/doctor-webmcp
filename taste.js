@@ -263,7 +263,7 @@
         if (!dot || !txt) return;
         if (d && d.ok && d.alive) {
           dot.classList.add("on");
-          txt.textContent = "you're here · active " + (d.lastSeenAgoSec != null ? agoText(d.lastSeenAgoSec) : "now");
+          txt.textContent = "you're here · " + (d.lastSeenAgoSec != null ? agoText(d.lastSeenAgoSec) : "active now");
         } else {
           dot.classList.remove("on");
           txt.textContent = "no check-in yet";
