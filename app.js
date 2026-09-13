@@ -359,15 +359,22 @@
     postChat(v);
   });
 
-  // The big prompt posts into the same room — the agent sees it and searches.
+  // The big prompt searches YouTube directly and shows the videos as cards,
+  // so the page works with no agent in the loop. It also posts into the room
+  // so the agent (when present) sees the request.
   $("#ask-form").addEventListener("submit", function (ev) {
     ev.preventDefault();
     var input = $("#ask-input");
     var v = input.value.trim();
     if (!v) return;
     input.value = "";
-    postChat(v).then(function () {
-      document.querySelector(".chat-section").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    postChat(v);
+    var box = $("#results");
+    box.innerHTML = '<div class="empty">Searching…</div>';
+    api("/api/tools/search?q=" + encodeURIComponent(v) + "&max=8").then(function (data) {
+      displayVideosOnPage(data.videos);
+    }).catch(function (err) {
+      box.innerHTML = '<div class="empty">Could not search: ' + esc(err.message) + "</div>";
     });
   });
 
