@@ -71,6 +71,34 @@
     $("#taste-status").textContent = msg || "";
   }
 
+  function agoText(sec) {
+    if (sec == null) return "";
+    if (sec < 60) return "active " + sec + "s ago";
+    var m = Math.round(sec / 60);
+    if (m < 60) return "active " + m + "m ago";
+    return "active " + Math.round(m / 60) + "h ago";
+  }
+
+  function checkPresence() {
+    fetch("/api/taste/presence")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var dot = $("#presence-dot");
+        var txt = $("#presence-text");
+        if (!dot || !txt) return;
+        if (d && d.ok && d.alive) {
+          dot.classList.add("on");
+          txt.textContent = "Brodie is here" + (d.lastSeenAgoSec != null ? " · " + agoText(d.lastSeenAgoSec) : "");
+        } else {
+          dot.classList.remove("on");
+          txt.textContent = d && d.ok && d.lastSeenAgoSec != null
+            ? "Brodie is away · " + agoText(d.lastSeenAgoSec)
+            : "Brodie is away";
+        }
+      })
+      .catch(function () { /* transient — next check retries */ });
+  }
+
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
@@ -217,6 +245,8 @@
   function init() {
     if (!$("#taste-form")) return;
     renderProfile(false);
+    checkPresence();
+    setInterval(checkPresence, 30000);
 
     $("#taste-form").addEventListener("submit", function (e) {
       e.preventDefault();

@@ -35,6 +35,30 @@ async function ensureTables(): Promise<void> {
       PRIMARY KEY (job_id, slot)
     )`;
   await sql()`CREATE INDEX IF NOT EXISTS idx_taste_jobs_status ON taste_jobs (status)`;
+  await sql()`
+    CREATE TABLE IF NOT EXISTS taste_presence (
+      id TEXT PRIMARY KEY,
+      last_seen BIGINT NOT NULL,
+      note TEXT NOT NULL DEFAULT ''
+    )`;
+}
+
+// ---- Presence: the room knows the agent is actually there ----
+
+export async function heartbeat(note: string): Promise<void> {
+  await ensureTables();
+  const now = Date.now();
+  await sql()`INSERT INTO taste_presence (id, last_seen, note)
+    VALUES ('brodie', ${now}, ${note})
+    ON CONFLICT (id) DO UPDATE SET last_seen = EXCLUDED.last_seen, note = EXCLUDED.note`;
+}
+
+export async function getPresence(): Promise<{ lastSeen: number; note: string } | null> {
+  await ensureTables();
+  const rows = (await sql()`SELECT last_seen, note FROM taste_presence
+    WHERE id = 'brodie' LIMIT 1`) as unknown as { last_seen: number | string; note: string }[];
+  if (!rows.length) return null;
+  return { lastSeen: Number(rows[0].last_seen), note: rows[0].note };
 }
 
 function newId(): string {

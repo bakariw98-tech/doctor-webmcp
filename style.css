@@ -1231,6 +1231,15 @@ body:not([data-stage="home"]) .bar-btn { width: 40px; height: 40px; }
 .taste-head h1 { margin: 0 0 6px; font-size: 22px; }
 .taste-head p { margin: 0 0 18px; max-width: 640px; }
 .taste-head b { color: var(--text); }
+.taste-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.taste-presence {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 13px; color: var(--muted); background: var(--card); white-space: nowrap;
+}
+.presence-dot { width: 9px; height: 9px; border-radius: 50%; background: #666; transition: background .3s, box-shadow .3s; }
+.presence-dot.on { background: #34d399; box-shadow: 0 0 8px #34d399; }
+@media (max-width: 640px) { .taste-head { flex-direction: column; } }
 
 .taste-layout {
   display: grid;

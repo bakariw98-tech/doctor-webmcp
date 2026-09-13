@@ -168,8 +168,14 @@
   <!-- TASTE — the training harness room -->
   <section id="taste-stage" class="stage-pane taste-pane" aria-label="Taste" hidden>
     <div class="taste-head">
-      <h1>Train Brodie's eye</h1>
-      <p class="muted">Give a prompt. Brodie picks up the job and makes <b>two variations himself</b> — no stock API, the agent is the compute. Pick the one you like — say why if you want. Every pick sharpens your <b>taste profile</b>, so plain prompts start coming out in <i>your</i> taste.</p>
+      <div>
+        <h1>Train Brodie's eye</h1>
+        <p class="muted">Give a prompt. Brodie picks up the job and makes <b>two variations himself</b> — no stock API, the agent is the compute. Pick the one you like — say why if you want. Every pick sharpens your <b>taste profile</b>, so plain prompts start coming out in <i>your</i> taste.</p>
+      </div>
+      <div class="taste-presence" id="taste-presence" title="Whether Brodie is around right now">
+        <span class="presence-dot" id="presence-dot"></span>
+        <span id="presence-text">checking…</span>
+      </div>
     </div>
     <div class="taste-layout">
       <div class="taste-main">
